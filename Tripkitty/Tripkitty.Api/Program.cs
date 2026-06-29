@@ -1,3 +1,4 @@
+using Serilog;
 using Tripkitty.Api.Endpoints;
 using Tripkitty.Api.Hubs;
 using Tripkitty.Api.Middleware;
@@ -5,6 +6,8 @@ using Tripkitty.Application.Services;
 using Tripkitty.Infrastructure.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Host.UseSerilog((ctx, lc) => lc.ReadFrom.Configuration(ctx.Configuration));
 
 builder.Services.AddOpenApi();
 builder.Services.AddInfrastructure(builder.Configuration);

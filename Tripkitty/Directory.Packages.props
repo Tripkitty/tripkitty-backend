@@ -9,6 +9,9 @@
     <PackageVersion Include="NSubstitute" Version="5.3.0"/>
     <PackageVersion Include="xunit" Version="2.9.3"/>
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.4"/>
+    <!-- Logging -->
+    <PackageVersion Include="Serilog.AspNetCore" Version="9.0.0"/>
+    <PackageVersion Include="Serilog.Sinks.File" Version="6.0.0"/>
     <!-- Main packages -->
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9"/>
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="9.0.6"/>
