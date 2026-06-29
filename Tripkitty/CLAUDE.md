@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Tripkitty is an ASP.NET Core 10 Web API backend for a travel expense-splitting app. Clean Architecture with 4 projects. IDE is JetBrains Rider.
 
+**Client API guide**: `docs/CLIENT_API_GUIDE.md` — полное руководство для фронтенда (auth/refresh, формат ошибок, If-Match, SignalR, Web Push). При изменении контрактов API обновляй этот документ.
+
 ## Solution Structure
 
 ```
@@ -71,6 +73,8 @@ OpenAPI docs at `/openapi/v1.json` in Development mode.
 
 **ID prefixes**: `u_*` (users), `g_*` (guests), plain UUID for trips/expenses/events.
 
+**Response envelope**: эндпоинты возвращают payload завёрнутым в именованный объект — `{ trip }`, `{ trips }`, `{ user }`, `{ member }`, `{ guest }`, `{ expense }`, `{ event }`. Исключения: `/settlements` (голый объект `{ balances, transactions }`) и сообщения `{ message }`. Событие в JSON-ключе — `@event` (C# escape), на проводе `event`.
+
 **Error format**:
 ```json
 { "error": { "code": "HANDLE_TAKEN", "message": "Логин @anya уже занят", "field": "handle" } }
@@ -104,6 +108,14 @@ OpenAPI docs at `/openapi/v1.json` in Development mode.
 5. Add repository in `Tripkitty.Infrastructure/Data/` if needed; register in `ServiceCollectionExtensions`
 6. Add endpoint group in `Tripkitty.Api/Endpoints/` and call `.Map*` in `Program.cs`
 7. Create EF migration
+
+## Testing
+
+**Test project**: `Tripkitty.Tests` (xUnit + NSubstitute). Run: `dotnet test Tripkitty.Tests`
+
+**CPM gotcha**: шаблон `dotnet new xunit` генерирует `Version` прямо в `<PackageReference>` — это ломает Central Package Management. Нужно убрать `Version` из `.csproj` и добавить `<PackageVersion>` в `Directory.Packages.props`.
+
+**Mocking**: NSubstitute. Все репозиторные и сервисные интерфейсы (`IUserRepository`, `IFriendshipRepository`, `ITripRepository`, `IPushNotificationService`, `ITripNotifier`) готовы к подстановке.
 
 ## Configuration
 
