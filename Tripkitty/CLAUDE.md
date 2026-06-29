@@ -93,6 +93,8 @@ OpenAPI docs at `/openapi/v1.json` in Development mode.
 
 **CORS**: настроен в `ServiceCollectionExtensions`. Allowed origins берутся из `Cors:AllowedOrigins` в конфиге. `UseCors()` должен стоять до `UseAuthentication()` в `Program.cs`.
 
+**Health Check**: `GET /health` — встроенный ASP.NET Core health check. `DbHealthCheck` (Infrastructure/Data/) проверяет `db.Database.CanConnectAsync()`. Зарегистрирован в `ServiceCollectionExtensions`, эндпоинт маппится в `Program.cs`.
+
 ## Adding a New Feature
 
 1. Add entity to `Tripkitty.Domain/Entities/`

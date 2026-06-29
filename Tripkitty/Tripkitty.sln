@@ -8,6 +8,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tripkitty.Application", "Tr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tripkitty.Infrastructure", "Tripkitty.Infrastructure\Tripkitty.Infrastructure.csproj", "{D47438DC-C684-43D4-A2CE-A4637FEBC894}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tripkitty.Tests", "Tripkitty.Tests\Tripkitty.Tests.csproj", "{8CA6F02C-0AF3-48D5-86E6-4AA319185EF3}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -66,6 +68,18 @@ Global
 		{D47438DC-C684-43D4-A2CE-A4637FEBC894}.Release|x64.Build.0 = Release|Any CPU
 		{D47438DC-C684-43D4-A2CE-A4637FEBC894}.Release|x86.ActiveCfg = Release|Any CPU
 		{D47438DC-C684-43D4-A2CE-A4637FEBC894}.Release|x86.Build.0 = Release|Any CPU
+		{8CA6F02C-0AF3-48D5-86E6-4AA319185EF3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8CA6F02C-0AF3-48D5-86E6-4AA319185EF3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8CA6F02C-0AF3-48D5-86E6-4AA319185EF3}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{8CA6F02C-0AF3-48D5-86E6-4AA319185EF3}.Debug|x64.Build.0 = Debug|Any CPU
+		{8CA6F02C-0AF3-48D5-86E6-4AA319185EF3}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{8CA6F02C-0AF3-48D5-86E6-4AA319185EF3}.Debug|x86.Build.0 = Debug|Any CPU
+		{8CA6F02C-0AF3-48D5-86E6-4AA319185EF3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8CA6F02C-0AF3-48D5-86E6-4AA319185EF3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8CA6F02C-0AF3-48D5-86E6-4AA319185EF3}.Release|x64.ActiveCfg = Release|Any CPU
+		{8CA6F02C-0AF3-48D5-86E6-4AA319185EF3}.Release|x64.Build.0 = Release|Any CPU
+		{8CA6F02C-0AF3-48D5-86E6-4AA319185EF3}.Release|x86.ActiveCfg = Release|Any CPU
+		{8CA6F02C-0AF3-48D5-86E6-4AA319185EF3}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

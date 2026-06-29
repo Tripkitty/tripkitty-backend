@@ -78,6 +78,10 @@ public static class ServiceCollectionExtensions
 
         services.AddAuthorization();
 
+        // Health checks
+        services.AddHealthChecks()
+            .AddCheck<DbHealthCheck>("database");
+
         // CORS
         var allowedOrigins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
         services.AddCors(options =>
