@@ -16,7 +16,8 @@ public interface IFriendService
 
 public class FriendService(
     IUserRepository userRepo,
-    IFriendshipRepository friendRepo) : IFriendService
+    IFriendshipRepository friendRepo,
+    IPushNotificationService pushService) : IFriendService
 {
     public async Task<UserDto?> SearchByHandleAsync(string handle)
     {
@@ -94,6 +95,11 @@ public class FriendService(
             {
                 existing.Status = FriendshipStatus.Accepted;
                 await friendRepo.SaveChangesAsync();
+
+                var currentUser = await userRepo.FindByIdAsync(currentUserId);
+                if (currentUser is not null)
+                    _ = pushService.NotifyAsync(targetUserId, "Запрос принят", $"{currentUser.Name} принял(а) ваш запрос в друзья");
+
                 return;
             }
 
@@ -102,6 +108,8 @@ public class FriendService(
 
         var targetUser = await userRepo.FindByIdAsync(targetUserId)
                          ?? throw new DomainException("NOT_FOUND", "User not found");
+
+        var senderUser = await userRepo.FindByIdAsync(currentUserId);
 
         var friendship = new Friendship
         {
@@ -113,6 +121,9 @@ public class FriendService(
 
         await friendRepo.AddAsync(friendship);
         await friendRepo.SaveChangesAsync();
+
+        if (senderUser is not null)
+            _ = pushService.NotifyAsync(targetUserId, "Запрос в друзья", $"{senderUser.Name} хочет добавить вас в друзья");
     }
 
     public async Task AcceptAsync(string currentUserId, string targetUserId)
@@ -129,6 +140,10 @@ public class FriendService(
 
         friendship.Status = FriendshipStatus.Accepted;
         await friendRepo.SaveChangesAsync();
+
+        var acceptingUser = await userRepo.FindByIdAsync(currentUserId);
+        if (acceptingUser is not null)
+            _ = pushService.NotifyAsync(friendship.RequestedById, "Запрос принят", $"{acceptingUser.Name} принял(а) ваш запрос в друзья");
     }
 
     public async Task DeclineAsync(string currentUserId, string targetUserId)

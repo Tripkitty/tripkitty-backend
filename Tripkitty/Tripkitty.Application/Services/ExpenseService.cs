@@ -12,7 +12,10 @@ public interface IExpenseService
     Task<SettlementsResponse> GetSettlementsAsync(string tripId, string userId);
 }
 
-public class ExpenseService(ITripRepository tripRepo) : IExpenseService
+public class ExpenseService(
+    ITripRepository tripRepo,
+    IPushNotificationService pushService,
+    ITripNotifier notifier) : IExpenseService
 {
     public async Task<ExpenseDto> AddAsync(string tripId, string userId, AddExpenseRequest request)
     {
@@ -60,7 +63,18 @@ public class ExpenseService(ITripRepository tripRepo) : IExpenseService
         trip.Version++;
         await tripRepo.SaveChangesAsync();
 
-        return new ExpenseDto(expense.Id, expense.Title, request.Amount, expense.Payer, expense.Share, expense.CreatedBy);
+        var otherMemberIds = trip.Members
+            .Select(m => m.UserId)
+            .Where(id => id != userId)
+            .ToList();
+
+        if (otherMemberIds.Count > 0)
+            _ = pushService.NotifyManyAsync(otherMemberIds, "Новый расход",
+                $"{trip.Name}: {expense.Title} — {request.Amount:F2}");
+
+        var dto = new ExpenseDto(expense.Id, expense.Title, request.Amount, expense.Payer, expense.Share, expense.CreatedBy);
+        _ = notifier.ExpenseAddedAsync(tripId, dto);
+        return dto;
     }
 
     public async Task RemoveAsync(string tripId, string userId, string expenseId)
@@ -78,6 +92,8 @@ public class ExpenseService(ITripRepository tripRepo) : IExpenseService
         trip.Expenses.Remove(expense);
         trip.Version++;
         await tripRepo.SaveChangesAsync();
+
+        _ = notifier.ExpenseRemovedAsync(tripId, expenseId);
     }
 
     public async Task<SettlementsResponse> GetSettlementsAsync(string tripId, string userId)

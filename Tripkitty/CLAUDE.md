@@ -81,7 +81,17 @@ OpenAPI docs at `/openapi/v1.json` in Development mode.
 
 **JWT**: access token 15 min, refresh token 30 days (stored hashed with SHA-256 in `RefreshTokens` table).
 
-**Realtime (WebSocket)**: not yet implemented — deferred to a later iteration.
+**Trip entity**: поле называется `Name`, не `Title`.
+
+**Repository interfaces** определены прямо в файле сервиса, который их использует (например, `IFriendshipRepository` — в `ParticipantService.cs`).
+
+**Realtime (SignalR)**: реализован. Хаб на `/hubs/trip`. Клиент вызывает `JoinTrip(tripId)` / `LeaveTrip(tripId)`. Сервер шлёт: `trip:updated`, `trip:deleted`, `expense:added`, `expense:removed`, `member:added`, `participant:removed`, `event:added`, `event:removed`. JWT передаётся как query-param `?access_token=`.
+
+**ITripNotifier**: интерфейс в Application, реализация `SignalRTripNotifier` в `Tripkitty.Api/Hubs/`. Регистрируется в `Program.cs` (не в `ServiceCollectionExtensions`), т.к. зависит от `TripHub` из Api-проекта.
+
+**Web Push (VAPID)**: реализован. Ключи уже в `appsettings.json`. При перегенерации — `VapidHelper.GenerateVapidKeys()` из пакета `WebPush`. `WebPushService` и `PushSubscriptionRepository` в Infrastructure. Подписка через `POST /notifications/subscribe`.
+
+**CORS**: настроен в `ServiceCollectionExtensions`. Allowed origins берутся из `Cors:AllowedOrigins` в конфиге. `UseCors()` должен стоять до `UseAuthentication()` в `Program.cs`.
 
 ## Adding a New Feature
 
@@ -98,3 +108,5 @@ OpenAPI docs at `/openapi/v1.json` in Development mode.
 `appsettings.json` requires:
 - `ConnectionStrings:Default` — PostgreSQL connection string
 - `Jwt:Key` (≥ 32 chars), `Jwt:Issuer`, `Jwt:Audience`, `Jwt:AccessTokenExpiryMinutes`, `Jwt:RefreshTokenExpiryDays`
+- `WebPush:Subject`, `WebPush:PublicKey`, `WebPush:PrivateKey` — VAPID ключи для Web Push
+- `Cors:AllowedOrigins` — массив разрешённых origins для PWA-клиента

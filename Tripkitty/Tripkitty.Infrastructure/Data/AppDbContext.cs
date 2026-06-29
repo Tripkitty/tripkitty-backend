@@ -13,6 +13,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TripEvent> TripEvents => Set<TripEvent>();
     public DbSet<Friendship> Friendships => Set<Friendship>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -103,6 +104,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasOne(r => r.User)
                 .WithMany()
                 .HasForeignKey(r => r.UserId);
+        });
+
+        // PushSubscription → User
+        modelBuilder.Entity<PushSubscription>(e =>
+        {
+            e.HasOne(p => p.User)
+                .WithMany()
+                .HasForeignKey(p => p.UserId);
+            e.HasIndex(p => new { p.UserId, p.Endpoint }).IsUnique();
         });
     }
 }

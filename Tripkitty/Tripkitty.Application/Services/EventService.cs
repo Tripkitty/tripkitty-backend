@@ -10,7 +10,9 @@ public interface IEventService
     Task RemoveAsync(string tripId, string userId, string eventId);
 }
 
-public class EventService(ITripRepository tripRepo) : IEventService
+public class EventService(
+    ITripRepository tripRepo,
+    ITripNotifier notifier) : IEventService
 {
     public async Task<TripEventDto> AddAsync(string tripId, string userId, AddEventRequest request)
     {
@@ -58,13 +60,15 @@ public class EventService(ITripRepository tripRepo) : IEventService
         trip.Version++;
         await tripRepo.SaveChangesAsync();
 
-        return new TripEventDto(
+        var dto = new TripEventDto(
             ev.Id, ev.Title,
             ev.Date.ToString("yyyy-MM-dd"),
             ev.Time?.ToString("HH:mm"),
             ev.EndTime?.ToString("HH:mm"),
             ev.CreatedBy
         );
+        _ = notifier.EventAddedAsync(tripId, dto);
+        return dto;
     }
 
     public async Task RemoveAsync(string tripId, string userId, string eventId)
@@ -82,5 +86,7 @@ public class EventService(ITripRepository tripRepo) : IEventService
         trip.Events.Remove(ev);
         trip.Version++;
         await tripRepo.SaveChangesAsync();
+
+        _ = notifier.EventRemovedAsync(tripId, eventId);
     }
 }

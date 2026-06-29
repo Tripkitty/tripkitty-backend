@@ -23,7 +23,9 @@ public interface IFriendshipRepository
 public class ParticipantService(
     ITripRepository tripRepo,
     IFriendshipRepository friendRepo,
-    IUserRepository userRepo) : IParticipantService
+    IUserRepository userRepo,
+    IPushNotificationService pushService,
+    ITripNotifier notifier) : IParticipantService
 {
     public async Task<GuestDto> AddMemberAsync(string tripId, string currentUserId, string targetUserId)
     {
@@ -50,7 +52,11 @@ public class ParticipantService(
         trip.Version++;
         await tripRepo.SaveChangesAsync();
 
-        return new GuestDto(targetUser.Id, targetUser.Name);
+        _ = pushService.NotifyAsync(targetUserId, "Вас добавили в поездку", trip.Name);
+
+        var dto = new GuestDto(targetUser.Id, targetUser.Name);
+        _ = notifier.MemberAddedAsync(tripId, dto);
+        return dto;
     }
 
     public async Task<GuestDto> AddGuestAsync(string tripId, string currentUserId, string guestName)
@@ -76,7 +82,9 @@ public class ParticipantService(
         trip.Version++;
         await tripRepo.SaveChangesAsync();
 
-        return new GuestDto(guest.Id, guest.Name);
+        var dto = new GuestDto(guest.Id, guest.Name);
+        _ = notifier.MemberAddedAsync(tripId, dto);
+        return dto;
     }
 
     public async Task RemoveParticipantAsync(string tripId, string currentUserId, string participantId)
@@ -119,6 +127,8 @@ public class ParticipantService(
 
         trip.Version++;
         await tripRepo.SaveChangesAsync();
+
+        _ = notifier.ParticipantRemovedAsync(tripId, participantId);
     }
 
     private static (string, string) Normalize(string a, string b) =>

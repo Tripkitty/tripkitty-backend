@@ -24,7 +24,9 @@ public interface ITripRepository
     Task SaveChangesAsync();
 }
 
-public class TripService(ITripRepository tripRepo) : ITripService
+public class TripService(
+    ITripRepository tripRepo,
+    ITripNotifier notifier) : ITripService
 {
     public async Task<List<TripSummaryDto>> GetAllAsync(string userId)
     {
@@ -63,7 +65,6 @@ public class TripService(ITripRepository tripRepo) : ITripService
         await tripRepo.AddAsync(trip);
         await tripRepo.SaveChangesAsync();
 
-        // reload with details
         var created = await tripRepo.GetByIdWithDetailsAsync(trip.Id)
                       ?? throw new DomainException("NOT_FOUND", "Trip not found after creation");
 
@@ -92,7 +93,9 @@ public class TripService(ITripRepository tripRepo) : ITripService
         trip.Version++;
         await tripRepo.SaveChangesAsync();
 
-        return MapToDetail(trip);
+        var dto = MapToDetail(trip);
+        _ = notifier.TripUpdatedAsync(tripId, dto);
+        return dto;
     }
 
     public async Task ClearAsync(string tripId, string userId)
@@ -108,6 +111,9 @@ public class TripService(ITripRepository tripRepo) : ITripService
         trip.Guests.Clear();
         trip.Version++;
         await tripRepo.SaveChangesAsync();
+
+        var dto = MapToDetail(trip);
+        _ = notifier.TripUpdatedAsync(tripId, dto);
     }
 
     public async Task DeleteAsync(string tripId, string userId)
@@ -120,6 +126,8 @@ public class TripService(ITripRepository tripRepo) : ITripService
 
         await tripRepo.DeleteAsync(trip);
         await tripRepo.SaveChangesAsync();
+
+        _ = notifier.TripDeletedAsync(tripId);
     }
 
     private static TripSummaryDto MapToSummary(Trip t) =>

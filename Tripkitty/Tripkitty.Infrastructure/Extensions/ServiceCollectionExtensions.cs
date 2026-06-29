@@ -22,11 +22,13 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<ITripRepository, TripRepository>();
         services.AddScoped<IFriendshipRepository, FriendshipRepository>();
+        services.AddScoped<IPushSubscriptionRepository, PushSubscriptionRepository>();
 
         // Infrastructure services
         services.AddScoped<IPasswordHasher, BcryptPasswordHasher>();
         services.AddScoped<IJwtService, JwtService>();
         services.AddScoped<IIcsService, IcsService>();
+        services.AddScoped<IPushNotificationService, WebPushService>();
 
         // Application services
         services.AddScoped<IAuthService, AuthService>();
@@ -35,6 +37,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IExpenseService, ExpenseService>();
         services.AddScoped<IFriendService, FriendService>();
         services.AddScoped<IEventService, EventService>();
+
+        // WebPush VAPID
+        services.Configure<WebPushOptions>(configuration.GetSection("WebPush"));
 
         // JWT Authentication
         var jwtKey = configuration["Jwt:Key"]
@@ -55,9 +60,36 @@ public static class ServiceCollectionExtensions
                     ValidAudience = jwtAudience,
                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
                 };
+                // SignalR WebSocket passes token via query string
+                options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
+                {
+                    OnMessageReceived = context =>
+                    {
+                        var token = context.Request.Query["access_token"];
+                        if (!string.IsNullOrEmpty(token) &&
+                            context.HttpContext.Request.Path.StartsWithSegments("/hubs"))
+                        {
+                            context.Token = token;
+                        }
+                        return Task.CompletedTask;
+                    }
+                };
             });
 
         services.AddAuthorization();
+
+        // CORS
+        var allowedOrigins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+        services.AddCors(options =>
+        {
+            options.AddDefaultPolicy(policy =>
+            {
+                policy.WithOrigins(allowedOrigins)
+                    .AllowAnyHeader()
+                    .AllowAnyMethod()
+                    .AllowCredentials();
+            });
+        });
 
         return services;
     }
