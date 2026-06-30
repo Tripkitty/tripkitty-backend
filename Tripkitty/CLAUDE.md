@@ -124,3 +124,22 @@ OpenAPI docs at `/openapi/v1.json` in Development mode.
 - `Jwt:Key` (≥ 32 chars), `Jwt:Issuer`, `Jwt:Audience`, `Jwt:AccessTokenExpiryMinutes`, `Jwt:RefreshTokenExpiryDays`
 - `WebPush:Subject`, `WebPush:PublicKey`, `WebPush:PrivateKey` — VAPID ключи для Web Push
 - `Cors:AllowedOrigins` — массив разрешённых origins для PWA-клиента
+
+## Docker / Деплой
+
+**docker-compose** лежит в корне монорепо (`Tripkitty/`), уровнем выше solution-папки. Контекст сборки API: `./tripkitty-backend/Tripkitty`, dockerfile: `Tripkitty.Api/Dockerfile`.
+
+**Dockerfile gotcha**: перед `dotnet restore` копировать `Directory.Packages.props` и `.csproj` всех проектов (Domain, Application, Infrastructure, Api) — иначе CPM не знает версии и зависимые проекты не находятся.
+
+**`[FromBody]` на DELETE**: `MapDelete` в Minimal API не выводит body автоматически — нужен явный `[FromBody]` (см. `NotificationEndpoints.cs`).
+
+**`UseCors()` порядок**: должен стоять ДО `UseHttpsRedirection()`, иначе preflight OPTIONS редиректится без CORS-заголовков. `UseHttpsRedirection()` — только в Development; в Docker TLS терминируется на уровне прокси.
+
+**Миграции в Docker**: `Program.cs` вызывает `db.Database.Migrate()` при старте — таблицы создаются автоматически.
+
+**Tailscale HTTPS** (локальный HTTPS с телефона):
+- `tailscale serve --bg http://localhost:3000` — web на порту 443
+- `tailscale serve --bg --https=5011 http://localhost:5010` — api на порту 5011
+- Домен: `dmitrys-macbook-pro.tail0b50a2.ts.net`
+
+**OrbStack**: контейнеры получают домен `<service>.tripkitty.orb.local`. OrbStack занимает порт 443 — не биндить на него Caddy или другой прокси.

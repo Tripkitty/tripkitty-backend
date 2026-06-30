@@ -35,4 +35,8 @@
       <ProjectReference Include="..\Tripkitty.Infrastructure\Tripkitty.Infrastructure.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <Folder Include="Certs\" />
+    </ItemGroup>
+
 </Project>

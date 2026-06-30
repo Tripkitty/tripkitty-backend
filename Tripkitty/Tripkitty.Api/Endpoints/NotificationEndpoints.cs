@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Tripkitty.Application.DTOs;
 using Tripkitty.Application.Services;
@@ -35,7 +36,7 @@ public static class NotificationEndpoints
         });
 
         group.MapDelete("/subscribe", async (
-            RemovePushSubscriptionRequest request,
+            [FromBody] RemovePushSubscriptionRequest request,
             ClaimsPrincipal user,
             IPushSubscriptionRepository repo) =>
         {

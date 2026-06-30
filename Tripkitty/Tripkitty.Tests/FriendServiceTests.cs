@@ -11,11 +11,12 @@ public class FriendServiceTests
     private readonly IUserRepository _userRepo = Substitute.For<IUserRepository>();
     private readonly IFriendshipRepository _friendRepo = Substitute.For<IFriendshipRepository>();
     private readonly IPushNotificationService _push = Substitute.For<IPushNotificationService>();
+    private readonly IFriendNotifier _friendNotifier = Substitute.For<IFriendNotifier>();
     private readonly FriendService _sut;
 
     public FriendServiceTests()
     {
-        _sut = new FriendService(_userRepo, _friendRepo, _push);
+        _sut = new FriendService(_userRepo, _friendRepo, _push, _friendNotifier);
     }
 
     // --- SearchByHandle ---

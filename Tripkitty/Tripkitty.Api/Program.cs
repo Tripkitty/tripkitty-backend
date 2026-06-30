@@ -1,8 +1,10 @@
+using Microsoft.EntityFrameworkCore;
 using Serilog;
 using Tripkitty.Api.Endpoints;
 using Tripkitty.Api.Hubs;
 using Tripkitty.Api.Middleware;
 using Tripkitty.Application.Services;
+using Tripkitty.Infrastructure.Data;
 using Tripkitty.Infrastructure.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -13,8 +15,15 @@ builder.Services.AddOpenApi();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddSignalR();
 builder.Services.AddScoped<ITripNotifier, SignalRTripNotifier>();
+builder.Services.AddScoped<IFriendNotifier, SignalRFriendNotifier>();
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.Migrate();
+}
 
 if (app.Environment.IsDevelopment())
 {
@@ -23,8 +32,12 @@ if (app.Environment.IsDevelopment())
 
 app.UseMiddleware<ExceptionMiddleware>();
 
-app.UseHttpsRedirection();
 app.UseCors();
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseAuthentication();
 app.UseAuthorization();

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
+using Npgsql;
 using Tripkitty.Application.Services;
 using Tripkitty.Infrastructure.Data;
 using Tripkitty.Infrastructure.Services;
@@ -15,8 +16,11 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         // Database
+        var dataSource = new NpgsqlDataSourceBuilder(configuration.GetConnectionString("Default"))
+            .EnableDynamicJson()
+            .Build();
         services.AddDbContext<AppDbContext>(options =>
-            options.UseNpgsql(configuration.GetConnectionString("Default")));
+            options.UseNpgsql(dataSource, o => o.EnableRetryOnFailure(3)));
 
         // Repositories
         services.AddScoped<IUserRepository, UserRepository>();

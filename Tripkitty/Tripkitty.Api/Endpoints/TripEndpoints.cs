@@ -141,7 +141,7 @@ public static class TripEndpoints
                 throw new DomainException("FORBIDDEN", "You are not a member of this trip");
 
             var ics = icsService.GenerateIcs(trip);
-            var safeName = string.Concat(trip.Name.Select(c => char.IsLetterOrDigit(c) ? c : '_'));
+            var safeName = string.Concat(trip.Name.Select(c => char.IsAsciiLetterOrDigit(c) ? c : '_'));
             context.Response.Headers["Content-Disposition"] = $"attachment; filename=\"{safeName}.ics\"";
 
             return Results.Content(ics, "text/calendar; charset=utf-8");

@@ -17,7 +17,8 @@ public interface IFriendService
 public class FriendService(
     IUserRepository userRepo,
     IFriendshipRepository friendRepo,
-    IPushNotificationService pushService) : IFriendService
+    IPushNotificationService pushService,
+    IFriendNotifier friendNotifier) : IFriendService
 {
     public async Task<UserDto?> SearchByHandleAsync(string handle)
     {
@@ -98,7 +99,11 @@ public class FriendService(
 
                 var currentUser = await userRepo.FindByIdAsync(currentUserId);
                 if (currentUser is not null)
+                {
                     _ = pushService.NotifyAsync(targetUserId, "Запрос принят", $"{currentUser.Name} принял(а) ваш запрос в друзья");
+                    _ = friendNotifier.FriendRequestAcceptedAsync(targetUserId,
+                        new FriendDto(currentUser.Id, currentUser.Name, currentUser.Handle, currentUser.Email));
+                }
 
                 return;
             }
@@ -143,7 +148,11 @@ public class FriendService(
 
         var acceptingUser = await userRepo.FindByIdAsync(currentUserId);
         if (acceptingUser is not null)
+        {
             _ = pushService.NotifyAsync(friendship.RequestedById, "Запрос принят", $"{acceptingUser.Name} принял(а) ваш запрос в друзья");
+            _ = friendNotifier.FriendRequestAcceptedAsync(friendship.RequestedById,
+                new FriendDto(acceptingUser.Id, acceptingUser.Name, acceptingUser.Handle, acceptingUser.Email));
+        }
     }
 
     public async Task DeclineAsync(string currentUserId, string targetUserId)
