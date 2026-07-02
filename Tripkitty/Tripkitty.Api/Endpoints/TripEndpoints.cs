@@ -128,7 +128,7 @@ public static class TripEndpoints
             return Results.Ok(new { message = "Event removed" });
         });
 
-        // ICS calendar endpoint
+        // ICS calendar download (requires auth)
         group.MapGet("/{id}/calendar.ics", async (string id, ClaimsPrincipal user,
             HttpContext context, ITripRepository tripRepo, IIcsService icsService) =>
         {
@@ -145,6 +145,24 @@ public static class TripEndpoints
             context.Response.Headers["Content-Disposition"] = $"attachment; filename=\"{safeName}.ics\"";
 
             return Results.Content(ics, "text/calendar; charset=utf-8");
+        });
+
+        // Calendar subscription URL for this user (webcal:// link for Apple Calendar)
+        group.MapGet("/{id}/calendar-url", async (string id, ClaimsPrincipal user,
+            HttpRequest httpRequest, ITripRepository tripRepo) =>
+        {
+            var userId = GetUserId(user);
+            var trip = await tripRepo.GetByIdWithDetailsAsync(id)
+                       ?? throw new DomainException("NOT_FOUND", "Trip not found");
+
+            var member = trip.Members.FirstOrDefault(m => m.UserId == userId)
+                         ?? throw new DomainException("FORBIDDEN", "You are not a member of this trip");
+
+            var baseUrl = $"{httpRequest.Scheme}://{httpRequest.Host}";
+            var httpsUrl = $"{baseUrl}/calendar/{member.CalendarToken}.ics";
+            var webcalUrl = httpsUrl.Replace("https://", "webcal://").Replace("http://", "webcal://");
+
+            return Results.Ok(new { url = webcalUrl, httpsUrl });
         });
 
         return app;

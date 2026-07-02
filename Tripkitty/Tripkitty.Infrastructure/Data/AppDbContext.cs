@@ -25,6 +25,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasKey(m => new { m.TripId, m.UserId });
             e.HasOne(m => m.Trip).WithMany(t => t.Members).HasForeignKey(m => m.TripId);
             e.HasOne(m => m.User).WithMany(u => u.TripMemberships).HasForeignKey(m => m.UserId);
+            e.HasIndex(m => m.CalendarToken).IsUnique();
         });
 
         // Friendship composite PK (UserAId < UserBId always)

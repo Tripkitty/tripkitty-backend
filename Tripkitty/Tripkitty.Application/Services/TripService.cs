@@ -19,6 +19,7 @@ public interface ITripRepository
     Task<List<Trip>> GetAllForUserAsync(string userId);
     Task<Trip?> GetByIdWithDetailsAsync(string tripId);
     Task<Trip?> GetByIdAsync(string tripId);
+    Task<Trip?> GetByCalendarTokenAsync(string calendarToken);
     Task AddAsync(Trip trip);
     Task DeleteAsync(Trip trip);
     Task SaveChangesAsync();

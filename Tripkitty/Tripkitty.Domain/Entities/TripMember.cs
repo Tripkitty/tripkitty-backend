@@ -4,6 +4,7 @@ public class TripMember
 {
     public string TripId { get; set; } = "";
     public string UserId { get; set; } = "";
+    public string CalendarToken { get; set; } = Guid.NewGuid().ToString("N");
     public Trip Trip { get; set; } = null!;
     public User User { get; set; } = null!;
 }

@@ -19,6 +19,8 @@ public class IcsService : IIcsService
         sb.AppendLine($"PRODID:-//Tripkitty//Tripkitty//EN");
         sb.AppendLine("CALSCALE:GREGORIAN");
         sb.AppendLine("METHOD:PUBLISH");
+        sb.AppendLine("X-PUBLISHED-TTL:PT5M");
+        sb.AppendLine($"X-WR-CALNAME:{EscapeText(trip.Name)}");
 
         // Trip-level event if it has dates
         if (trip.Start.HasValue)
