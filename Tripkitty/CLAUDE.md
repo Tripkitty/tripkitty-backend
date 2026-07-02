@@ -93,6 +93,8 @@ OpenAPI docs at `/openapi/v1.json` in Development mode.
 
 **ITripNotifier**: интерфейс в Application, реализация `SignalRTripNotifier` в `Tripkitty.Api/Hubs/`. Регистрируется в `Program.cs` (не в `ServiceCollectionExtensions`), т.к. зависит от `TripHub` из Api-проекта.
 
+**IFriendNotifier**: интерфейс в Application, реализация `SignalRFriendNotifier` в `Tripkitty.Api/Hubs/`. Регистрируется в `Program.cs`. Шлёт `friend:accepted` конкретному пользователю через `Clients.User(userId)`. `Clients.User()` работает из коробки — SignalR резолвит userId через `ClaimTypes.NameIdentifier` из JWT.
+
 **Web Push (VAPID)**: реализован. Ключи уже в `appsettings.json`. При перегенерации — `VapidHelper.GenerateVapidKeys()` из пакета `WebPush`. `WebPushService` и `PushSubscriptionRepository` в Infrastructure. Подписка через `POST /notifications/subscribe`.
 
 **CORS**: настроен в `ServiceCollectionExtensions`. Allowed origins берутся из `Cors:AllowedOrigins` в конфиге. `UseCors()` должен стоять до `UseAuthentication()` в `Program.cs`.
@@ -115,7 +117,7 @@ OpenAPI docs at `/openapi/v1.json` in Development mode.
 
 **CPM gotcha**: шаблон `dotnet new xunit` генерирует `Version` прямо в `<PackageReference>` — это ломает Central Package Management. Нужно убрать `Version` из `.csproj` и добавить `<PackageVersion>` в `Directory.Packages.props`.
 
-**Mocking**: NSubstitute. Все репозиторные и сервисные интерфейсы (`IUserRepository`, `IFriendshipRepository`, `ITripRepository`, `IPushNotificationService`, `ITripNotifier`) готовы к подстановке.
+**Mocking**: NSubstitute. Все репозиторные и сервисные интерфейсы (`IUserRepository`, `IFriendshipRepository`, `ITripRepository`, `IPushNotificationService`, `ITripNotifier`, `IFriendNotifier`) готовы к подстановке.
 
 ## Configuration
 
@@ -143,3 +145,27 @@ OpenAPI docs at `/openapi/v1.json` in Development mode.
 - Домен: `dmitrys-macbook-pro.tail0b50a2.ts.net`
 
 **OrbStack**: контейнеры получают домен `<service>.tripkitty.orb.local`. OrbStack занимает порт 443 — не биндить на него Caddy или другой прокси.
+
+## Known Gotchas
+
+**Npgsql 8.0 + JSONB `List<string>`**: требует `EnableDynamicJson()` на `NpgsqlDataSourceBuilder`. Без этого `Expense.Share` падает при записи. Настроено в `ServiceCollectionExtensions` через `NpgsqlDataSourceBuilder`.
+
+**Npgsql + NpgsqlDataSource**: `EnableRetryOnFailure` несовместим с `NpgsqlDataSource` — вызывает `ArgumentOutOfRangeException` / `CommandComplete while expecting ParseCompleteMessage` на повторных запросах. При использовании `NpgsqlDataSource` не добавлять `EnableRetryOnFailure` в `UseNpgsql`.
+
+**Fire-and-forget + scoped DbContext**: `_ = service.MethodAsync()` вызывает `ArgumentOutOfRangeException` от Npgsql — scoped `AppDbContext` диспозится до выполнения задачи. Всегда использовать `await` для методов, обращающихся к БД через scoped-сервисы.
+
+**DevSeeder и top-level statements**: классы-хелперы, вызываемые из `Program.cs` (top-level statements), не должны быть в namespace — иначе `CS0103: name does not exist in current context`. `DevSeeder.cs` без namespace создаёт тестовых пользователей (`test1`/`testtest1`, `test2`/`testtest2`) при старте в Development.
+
+**`AuthResponse` формат**: все auth-эндпоинты (`/login`, `/register`, `/refresh`) возвращают `{ user, tokens: { accessToken, refreshToken } }` — токены вложены в `tokens`, не на верхнем уровне.
+
+**HTTP-заголовки и кириллица**: `char.IsLetterOrDigit` пропускает кириллицу — использовать `char.IsAsciiLetterOrDigit` для значений заголовков (например, `Content-Disposition filename`).
+
+**CORS `AllowedOrigins`**: trailing slash в origin (`https://host/`) ломает CORS-матчинг — только без слеша.
+
+**PostgreSQL в Docker**: контейнер поднимается через `docker-compose.yml` в корне монорепо. Запуск: `docker compose up postgres -d` из корня монорепо. psql: `docker exec tripkitty-postgres-1 psql -U postgres -d tripkitty`.
+
+**Очистка данных в БД**: `docker exec tripkitty-postgres-1 psql -U postgres -d tripkitty -c "TRUNCATE TABLE \"RefreshTokens\", \"PushSubscriptions\", \"Expenses\", \"TripEvents\", \"TripMembers\", \"Guests\", \"Friendships\", \"Trips\", \"Users\" RESTART IDENTITY CASCADE;"` — после очистки пользователям нужно заново логиниться (JWT ссылается на несуществующих юзеров).
+
+**Миграция записана, но таблицы нет**: удалить запись из `__EFMigrationsHistory` (`DELETE FROM "__EFMigrationsHistory" WHERE "MigrationId" = '<name>'`) и повторить `dotnet ef database update`.
+
+**HTTPS для локальной разработки**: mkcert + Kestrel. Сертификаты в `Tripkitty.Api/Certs/` (gitignored). Генерация: `mkcert 192.168.1.74 localhost 127.0.0.1`. Kestrel-конфиг прописан в `appsettings.json` (`Kestrel.Endpoints`) и перекрывает `launchSettings.json`.

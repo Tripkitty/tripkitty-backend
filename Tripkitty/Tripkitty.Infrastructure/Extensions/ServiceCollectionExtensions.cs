@@ -20,7 +20,7 @@ public static class ServiceCollectionExtensions
             .EnableDynamicJson()
             .Build();
         services.AddDbContext<AppDbContext>(options =>
-            options.UseNpgsql(dataSource, o => o.EnableRetryOnFailure(3)));
+            options.UseNpgsql(dataSource));
 
         // Repositories
         services.AddScoped<IUserRepository, UserRepository>();

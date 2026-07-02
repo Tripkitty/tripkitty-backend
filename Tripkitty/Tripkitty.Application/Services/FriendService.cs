@@ -100,8 +100,8 @@ public class FriendService(
                 var currentUser = await userRepo.FindByIdAsync(currentUserId);
                 if (currentUser is not null)
                 {
-                    _ = pushService.NotifyAsync(targetUserId, "Запрос принят", $"{currentUser.Name} принял(а) ваш запрос в друзья");
-                    _ = friendNotifier.FriendRequestAcceptedAsync(targetUserId,
+                    await pushService.NotifyAsync(targetUserId, "Запрос принят", $"{currentUser.Name} принял(а) ваш запрос в друзья");
+                    await friendNotifier.FriendRequestAcceptedAsync(targetUserId,
                         new FriendDto(currentUser.Id, currentUser.Name, currentUser.Handle, currentUser.Email));
                 }
 
@@ -128,7 +128,7 @@ public class FriendService(
         await friendRepo.SaveChangesAsync();
 
         if (senderUser is not null)
-            _ = pushService.NotifyAsync(targetUserId, "Запрос в друзья", $"{senderUser.Name} хочет добавить вас в друзья");
+            await pushService.NotifyAsync(targetUserId, "Запрос в друзья", $"{senderUser.Name} хочет добавить вас в друзья");
     }
 
     public async Task AcceptAsync(string currentUserId, string targetUserId)
@@ -149,8 +149,8 @@ public class FriendService(
         var acceptingUser = await userRepo.FindByIdAsync(currentUserId);
         if (acceptingUser is not null)
         {
-            _ = pushService.NotifyAsync(friendship.RequestedById, "Запрос принят", $"{acceptingUser.Name} принял(а) ваш запрос в друзья");
-            _ = friendNotifier.FriendRequestAcceptedAsync(friendship.RequestedById,
+            await pushService.NotifyAsync(friendship.RequestedById, "Запрос принят", $"{acceptingUser.Name} принял(а) ваш запрос в друзья");
+            await friendNotifier.FriendRequestAcceptedAsync(friendship.RequestedById,
                 new FriendDto(acceptingUser.Id, acceptingUser.Name, acceptingUser.Handle, acceptingUser.Email));
         }
     }
