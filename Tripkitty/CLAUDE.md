@@ -93,7 +93,7 @@ OpenAPI docs at `/openapi/v1.json` in Development mode.
 
 **ITripNotifier**: интерфейс в Application, реализация `SignalRTripNotifier` в `Tripkitty.Api/Hubs/`. Регистрируется в `Program.cs` (не в `ServiceCollectionExtensions`), т.к. зависит от `TripHub` из Api-проекта.
 
-**IFriendNotifier**: интерфейс в Application, реализация `SignalRFriendNotifier` в `Tripkitty.Api/Hubs/`. Регистрируется в `Program.cs`. Шлёт `friend:accepted` конкретному пользователю через `Clients.User(userId)`. `Clients.User()` работает из коробки — SignalR резолвит userId через `ClaimTypes.NameIdentifier` из JWT.
+**IFriendNotifier**: интерфейс в Application, реализация `SignalRFriendNotifier` в `Tripkitty.Api/Hubs/`. Регистрируется в `Program.cs`. Шлёт `friend:accepted` через `Clients.User(userId)` — работает из коробки через `ClaimTypes.NameIdentifier`. **Паттерн**: при любом принятии дружбы (в т.ч. auto-accept в `SendRequestAsync`) нужно уведомлять **обоих** пользователей — каждый получает dto другого.
 
 **Web Push (VAPID)**: реализован. Ключи уже в `appsettings.json`. При перегенерации — `VapidHelper.GenerateVapidKeys()` из пакета `WebPush`. `WebPushService` и `PushSubscriptionRepository` в Infrastructure. Подписка через `POST /notifications/subscribe`.
 
@@ -135,16 +135,13 @@ OpenAPI docs at `/openapi/v1.json` in Development mode.
 
 **`[FromBody]` на DELETE**: `MapDelete` в Minimal API не выводит body автоматически — нужен явный `[FromBody]` (см. `NotificationEndpoints.cs`).
 
-**`UseCors()` порядок**: должен стоять ДО `UseHttpsRedirection()`, иначе preflight OPTIONS редиректится без CORS-заголовков. `UseHttpsRedirection()` — только в Development; в Docker TLS терминируется на уровне прокси.
+**`UseCors()` порядок**: должен стоять ДО `UseHttpsRedirection()`, иначе preflight OPTIONS редиректится без CORS-заголовков. `UseHttpsRedirection()` — только в Development; в Docker TLS терминируется Kestrel/nginx напрямую.
 
 **Миграции в Docker**: `Program.cs` вызывает `db.Database.Migrate()` при старте — таблицы создаются автоматически.
 
-**Tailscale HTTPS** (локальный HTTPS с телефона):
-- `tailscale serve --bg http://localhost:3000` — web на порту 443
-- `tailscale serve --bg --https=5011 http://localhost:5010` — api на порту 5011
-- Домен: `dmitrys-macbook-pro.tail0b50a2.ts.net`
+**HTTPS в Docker (без Caddy)**: TLS терминируется напрямую — Kestrel для API, nginx для web. Сертификаты (mkcert) монтируются через volumes. Доступ с телефона в одной сети: `https://192.168.1.74:8443` (web), `https://192.168.1.74:5011` (api). Телефону нужно доверять mkcert root CA (`mkcert -CAROOT` → установить `rootCA.pem` на устройство).
 
-**OrbStack**: контейнеры получают домен `<service>.tripkitty.orb.local`. OrbStack занимает порт 443 — не биндить на него Caddy или другой прокси.
+**OrbStack**: контейнеры получают домен `<service>.tripkitty.orb.local`. OrbStack занимает порт 443 — не биндить на него nginx или другой прокси.
 
 ## Known Gotchas
 
@@ -169,3 +166,7 @@ OpenAPI docs at `/openapi/v1.json` in Development mode.
 **Миграция записана, но таблицы нет**: удалить запись из `__EFMigrationsHistory` (`DELETE FROM "__EFMigrationsHistory" WHERE "MigrationId" = '<name>'`) и повторить `dotnet ef database update`.
 
 **HTTPS для локальной разработки**: mkcert + Kestrel. Сертификаты в `Tripkitty.Api/Certs/` (gitignored). Генерация: `mkcert 192.168.1.74 localhost 127.0.0.1`. Kestrel-конфиг прописан в `appsettings.json` (`Kestrel.Endpoints`) и перекрывает `launchSettings.json`.
+
+**Kestrel + Docker (Production)**: `appsettings.json` с `Kestrel.Endpoints` перекрывает порт из Dockerfile — задавать через env `Kestrel__Endpoints__Https__Url: https://+:8443` в docker-compose. Cert-файлы монтировать через volumes и указывать в `Kestrel__Endpoints__Https__Certificate__Path` / `__KeyPath`.
+
+**`docker compose restart` vs `up -d`**: `restart` не пересоздаёт контейнер — изменения в `volumes` и `environment` не применяются. `--force-recreate` пересоздаёт контейнер из текущего образа, но **не пересобирает образ** — для этого нужен `--build`. Полный цикл при изменении кода: `docker compose up -d --build --force-recreate <service>`.

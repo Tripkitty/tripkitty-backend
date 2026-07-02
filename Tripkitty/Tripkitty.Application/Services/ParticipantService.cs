@@ -52,10 +52,11 @@ public class ParticipantService(
         trip.Version++;
         await tripRepo.SaveChangesAsync();
 
-        _ = pushService.NotifyAsync(targetUserId, "Вас добавили в поездку", trip.Name);
+        await pushService.NotifyAsync(targetUserId, "Вас добавили в поездку", trip.Name);
 
         var dto = new GuestDto(targetUser.Id, targetUser.Name);
         _ = notifier.MemberAddedAsync(tripId, dto);
+        _ = notifier.MemberInvitedAsync(targetUserId, tripId);
         return dto;
     }
 

@@ -69,7 +69,7 @@ public class ExpenseService(
             .ToList();
 
         if (otherMemberIds.Count > 0)
-            _ = pushService.NotifyManyAsync(otherMemberIds, "Новый расход",
+            await pushService.NotifyManyAsync(otherMemberIds, "Новый расход",
                 $"{trip.Name}: {expense.Title} — {request.Amount:F2}");
 
         var dto = new ExpenseDto(expense.Id, expense.Title, request.Amount, expense.Payer, expense.Share, expense.CreatedBy);

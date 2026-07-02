@@ -9,6 +9,7 @@ public interface ITripNotifier
     Task ExpenseAddedAsync(string tripId, ExpenseDto expense);
     Task ExpenseRemovedAsync(string tripId, string expenseId);
     Task MemberAddedAsync(string tripId, GuestDto member);
+    Task MemberInvitedAsync(string userId, string tripId);
     Task ParticipantRemovedAsync(string tripId, string participantId);
     Task EventAddedAsync(string tripId, TripEventDto ev);
     Task EventRemovedAsync(string tripId, string eventId);

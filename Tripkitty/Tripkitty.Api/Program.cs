@@ -24,7 +24,7 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
 
-    if (app.Environment.IsDevelopment())
+    if (app.Environment.IsDevelopment() || Environment.GetEnvironmentVariable("SEED_TEST_USERS") == "true")
         await DevSeeder.SeedAsync(scope.ServiceProvider);
 }
 

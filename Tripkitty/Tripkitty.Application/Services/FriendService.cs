@@ -136,7 +136,11 @@ public class FriendService(
         await friendRepo.SaveChangesAsync();
 
         if (senderUser is not null)
+        {
             await pushService.NotifyAsync(targetUserId, "Запрос в друзья", $"{senderUser.Name} хочет добавить вас в друзья");
+            await friendNotifier.FriendRequestReceivedAsync(targetUserId,
+                new FriendDto(senderUser.Id, senderUser.Name, senderUser.Handle, senderUser.Email));
+        }
     }
 
     public async Task AcceptAsync(string currentUserId, string targetUserId)

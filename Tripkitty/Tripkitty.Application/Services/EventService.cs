@@ -12,6 +12,7 @@ public interface IEventService
 
 public class EventService(
     ITripRepository tripRepo,
+    IPushNotificationService pushService,
     ITripNotifier notifier) : IEventService
 {
     public async Task<TripEventDto> AddAsync(string tripId, string userId, AddEventRequest request)
@@ -67,6 +68,15 @@ public class EventService(
             ev.EndTime?.ToString("HH:mm"),
             ev.CreatedBy
         );
+        var otherMemberIds = trip.Members
+            .Select(m => m.UserId)
+            .Where(id => id != userId)
+            .ToList();
+
+        if (otherMemberIds.Count > 0)
+            await pushService.NotifyManyAsync(otherMemberIds, "Новое мероприятие",
+                $"{trip.Name}: {ev.Title} — {date:d MMMM}");
+
         _ = notifier.EventAddedAsync(tripId, dto);
         return dto;
     }
