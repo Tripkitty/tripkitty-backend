@@ -105,6 +105,14 @@ public class FriendService(
                         new FriendDto(currentUser.Id, currentUser.Name, currentUser.Handle, currentUser.Email));
                 }
 
+                // Notify the current user too so their UI updates
+                var counterUser = existing.UserAId == targetUserId ? existing.UserA : existing.UserB;
+                if (counterUser is not null)
+                {
+                    await friendNotifier.FriendRequestAcceptedAsync(currentUserId,
+                        new FriendDto(counterUser.Id, counterUser.Name, counterUser.Handle, counterUser.Email));
+                }
+
                 return;
             }
 
