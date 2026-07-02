@@ -131,6 +131,14 @@ OpenAPI docs at `/openapi/v1.json` in Development mode.
 
 **docker-compose** лежит в корне монорепо (`Tripkitty/`), уровнем выше solution-папки. Контекст сборки API: `./tripkitty-backend/Tripkitty`, dockerfile: `Tripkitty.Api/Dockerfile`.
 
+**Прод (anpulein.ru)**: `docker-compose.prod.yml` в корне монорепо — standalone-файл (не override: слияние `ports` в compose добавляет, а не заменяет). TLS терминирует nginx на хосте (`nginx-tripkitty.conf`), контейнеры слушают plain HTTP только на `127.0.0.1` (api :5010, web :8081), порт postgres наружу не публикуется. Секреты — из `.env` (шаблон `.env.prod.example`). Шаги — `DEPLOY.md`.
+
+**Kestrel-секцию нельзя удалить через env**: `appsettings.json` содержит `Kestrel:Endpoints:Https` — для plain HTTP в контейнере перебивать URL эндпоинта: `Kestrel__Endpoints__Https__Url: http://+:8080`.
+
+**SignalR за nginx-прокси**: нужны `proxy_http_version 1.1`, заголовки `Upgrade`/`Connection` (через `map $http_upgrade`) и `proxy_read_timeout` больше keepalive SignalR (120s).
+
+**VAPID public key отдаётся фронту через API** (`GET /notifications/vapid-public-key`) — ротация ключей не требует пересборки фронтенда.
+
 **Dockerfile gotcha**: перед `dotnet restore` копировать `Directory.Packages.props` и `.csproj` всех проектов (Domain, Application, Infrastructure, Api) — иначе CPM не знает версии и зависимые проекты не находятся.
 
 **`[FromBody]` на DELETE**: `MapDelete` в Minimal API не выводит body автоматически — нужен явный `[FromBody]` (см. `NotificationEndpoints.cs`).
@@ -170,3 +178,15 @@ OpenAPI docs at `/openapi/v1.json` in Development mode.
 **Kestrel + Docker (Production)**: `appsettings.json` с `Kestrel.Endpoints` перекрывает порт из Dockerfile — задавать через env `Kestrel__Endpoints__Https__Url: https://+:8443` в docker-compose. Cert-файлы монтировать через volumes и указывать в `Kestrel__Endpoints__Https__Certificate__Path` / `__KeyPath`.
 
 **`docker compose restart` vs `up -d`**: `restart` не пересоздаёт контейнер — изменения в `volumes` и `environment` не применяются. `--force-recreate` пересоздаёт контейнер из текущего образа, но **не пересобирает образ** — для этого нужен `--build`. Полный цикл при изменении кода: `docker compose up -d --build --force-recreate <service>`.
+
+**`SEED_TEST_USERS` env var**: переменная `SEED_TEST_USERS=true` в docker-compose запускает `DevSeeder` в Production — создаёт `test1`/`testtest1`, `test2`/`testtest2`. Убрать после создания реальных аккаунтов.
+
+**SignalR групповые события требуют `tripId` в payload**: `hub.Clients.Group(tripId).SendAsync(...)` доставляет события только участникам группы, но payload должен содержать `tripId` — иначе фронтенд не знает к какой поездке применить обновление.
+
+**`joinTrip` нужно вызывать в TripDetailPage**: без `joinTrip(tripId)` в `useEffect` клиент не в SignalR-группе поездки и не получает `expense:added`, `event:added` и т.д. Race condition: `joinTrip` может вызваться до установки соединения — после `_connection.start()` нужен повторный `rejoinAll()`.
+
+**`Clients.User(userId)` для персональных событий**: события типа «тебя добавили в поездку» или «запрос в друзья» отправлять через `Clients.User(userId)`, а не через группу — новый участник ещё не в группе поездки.
+
+**`mapApiTripDetail` возвращает членов без friend-данных**: `friends/incoming/outgoing` у trip-member всегда `[]`. При мёрдже `{ ...existing, ...tripUsers }` данные текущего пользователя перезаписываются — список друзей пропадает. Использовать хелпер `mergeUsers()` (в `StoreContext`), который после мёрджа восстанавливает запись текущего пользователя.
+
+**PWA auto-update требует `skipWaiting` + `clientsClaim`**: при стратегии `injectManifest` (`vite-plugin-pwa`) нужно явно вызывать `self.skipWaiting()` и `clientsClaim()` в `sw.ts` — иначе новый service worker ждёт закрытия всех вкладок и пользователям приходится переустанавливать PWA.

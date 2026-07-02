@@ -38,15 +38,27 @@ public class ExpenseService(
         if (request.Share is null || request.Share.Count == 0)
             throw new DomainException("VALIDATION_ERROR", "Share must have at least one participant", "share");
 
-        // Validate payer and share are trip participants
+        ValidateSplitType(request);
+
         var allParticipantIds = GetAllParticipantIds(trip);
 
         if (!allParticipantIds.Contains(request.Payer))
             throw new DomainException("INVALID_PAYER", "Payer is not a participant in this trip", "payer");
 
-        var invalidShare = request.Share.Where(s => !allParticipantIds.Contains(s)).ToList();
+        var invalidShare = request.Share.Where(s => !allParticipantIds.Contains(s.ParticipantId)).ToList();
         if (invalidShare.Count > 0)
             throw new DomainException("INVALID_SHARE", "Some share participants are not in this trip", "share");
+
+        var shareEntries = request.Share
+            .GroupBy(s => s.ParticipantId)
+            .Select(g => g.First())
+            .Select(s => new ShareEntry
+            {
+                ParticipantId = s.ParticipantId,
+                Weight = s.Weight,
+                AmountMinor = s.Amount.HasValue ? (long)Math.Round(s.Amount.Value * 100) : null
+            })
+            .ToList();
 
         var expense = new Expense
         {
@@ -55,7 +67,8 @@ public class ExpenseService(
             Title = request.Title.Trim(),
             AmountMinor = (long)Math.Round(request.Amount * 100),
             Payer = request.Payer,
-            Share = request.Share.Distinct().ToList(),
+            Share = shareEntries,
+            SplitType = request.SplitType,
             CreatedBy = userId
         };
 
@@ -72,7 +85,7 @@ public class ExpenseService(
             await pushService.NotifyManyAsync(otherMemberIds, "Новый расход",
                 $"{trip.Name}: {expense.Title} — {request.Amount:F2}");
 
-        var dto = new ExpenseDto(expense.Id, expense.Title, request.Amount, expense.Payer, expense.Share, expense.CreatedBy);
+        var dto = MapToDto(expense, request.Amount);
         _ = notifier.ExpenseAddedAsync(tripId, dto);
         return dto;
     }
@@ -112,6 +125,44 @@ public class ExpenseService(
             transactions.Select(t => new SettlementDto(t.From, t.To, t.Amount)).ToList()
         );
     }
+
+    private static void ValidateSplitType(AddExpenseRequest request)
+    {
+        switch (request.SplitType)
+        {
+            case SplitType.ByShares:
+                if (request.Share.Any(s => !s.Weight.HasValue || s.Weight.Value <= 0))
+                    throw new DomainException("VALIDATION_ERROR",
+                        "All share entries must have a positive weight for ByShares split", "share");
+                break;
+
+            case SplitType.ByAmounts:
+                if (request.Share.Any(s => !s.Amount.HasValue || s.Amount.Value <= 0))
+                    throw new DomainException("VALIDATION_ERROR",
+                        "All share entries must have a positive amount for ByAmounts split", "share");
+
+                var shareSum = request.Share.Sum(s => s.Amount!.Value);
+                if (Math.Abs(shareSum - request.Amount) > 0.01m)
+                    throw new DomainException("VALIDATION_ERROR",
+                        $"Sum of share amounts ({shareSum:F2}) must equal total amount ({request.Amount:F2})", "share");
+                break;
+        }
+    }
+
+    private static ExpenseDto MapToDto(Expense expense, decimal amount) =>
+        new(
+            expense.Id,
+            expense.Title,
+            amount,
+            expense.Payer,
+            expense.Share.Select(s => new ShareEntryDto(
+                s.ParticipantId,
+                s.Weight,
+                s.AmountMinor.HasValue ? s.AmountMinor.Value / 100m : null
+            )).ToList(),
+            expense.SplitType,
+            expense.CreatedBy
+        );
 
     private static HashSet<string> GetAllParticipantIds(Trip trip)
     {

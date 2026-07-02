@@ -191,7 +191,7 @@
   "version": 4,
   "members": [ { "id": "u_...", "name": "Аня", "handle": "anya", "email": "..." } ],
   "guests":  [ { "id": "g_...", "name": "Петя" } ],
-  "expenses":[ { "id": "...", "title": "Такси", "amount": 1200.50, "payer": "u_...", "share": ["u_...","g_..."], "createdBy": "u_..." } ],
+  "expenses":[ { "id": "...", "title": "Такси", "amount": 1200.50, "payer": "u_...", "share": [{"participantId":"u_..."},{"participantId":"g_..."}], "splitType": 0, "createdBy": "u_..." } ],
   "events":  [ { "id": "...", "title": "Заезд", "date": "2026-07-01", "time": "14:00", "endTime": null, "createdBy": "u_..." } ]
 }
 ```
@@ -278,14 +278,58 @@ If-Match: 4
 
 `POST /trips/{id}/expenses`
 
+Поле `splitType` определяет способ разбивки:
+
+| Значение | Режим | Описание |
+|---|---|---|
+| `0` | `Equal` (по умолчанию) | Поровну между всеми участниками `share` |
+| `1` | `ByShares` | Пропорционально по весам (`weight`) |
+| `2` | `ByAmounts` | Точные суммы на каждого (`amount`) |
+
+**Равномерное деление** (`splitType: 0` или не передавать):
 ```json
 {
   "title": "Такси из аэропорта",
   "amount": 1200.50,
   "payer": "u_...",
-  "share": ["u_...", "g_...", "u_..."]
+  "splitType": 0,
+  "share": [
+    { "participantId": "u_..." },
+    { "participantId": "g_..." }
+  ]
 }
 ```
+
+**По частям** (`splitType: 1`) — пропорциональное деление:
+```json
+{
+  "title": "Аренда номера",
+  "amount": 9000,
+  "payer": "u_alice",
+  "splitType": 1,
+  "share": [
+    { "participantId": "u_alice", "weight": 2 },
+    { "participantId": "u_bob",   "weight": 1 }
+  ]
+}
+```
+Алиса платит 6000 (2/3), Боб — 3000 (1/3).
+
+**По суммам** (`splitType: 2`) — точные суммы:
+```json
+{
+  "title": "Ужин",
+  "amount": 4700,
+  "payer": "u_alice",
+  "splitType": 2,
+  "share": [
+    { "participantId": "u_alice",   "amount": 2000 },
+    { "participantId": "u_bob",     "amount": 1500 },
+    { "participantId": "u_charlie", "amount": 1200 }
+  ]
+}
+```
+Сумма `amount` в `share` должна точно совпадать с полем `amount` (допуск ±0.01).
 
 Правила валидации:
 
@@ -294,9 +338,26 @@ If-Match: 4
 - `payer` — обязателен и должен быть участником поездки (`INVALID_PAYER`).
 - `share` — минимум один участник, **все** должны быть участниками поездки
   (`INVALID_SHARE`). Дубликаты в `share` сервер схлопывает автоматически.
+- `ByShares`: все `weight` обязательны и `> 0` (`VALIDATION_ERROR`, field `share`).
+- `ByAmounts`: все `amount` обязательны и `> 0`, сумма должна равняться `amount` (`VALIDATION_ERROR`, field `share`).
 
-Ответ `{ "expense": ExpenseDto }`. Сумма делится **поровну** между участниками
-из `share`.
+Ответ `{ "expense": ExpenseDto }`.
+
+`ExpenseDto`:
+```json
+{
+  "id": "...",
+  "title": "Такси",
+  "amount": 1200.50,
+  "payer": "u_...",
+  "splitType": 0,
+  "share": [
+    { "participantId": "u_...", "weight": null, "amount": null },
+    { "participantId": "g_...", "weight": null, "amount": null }
+  ],
+  "createdBy": "u_..."
+}
+```
 
 ### 5.2 Удалить расход
 

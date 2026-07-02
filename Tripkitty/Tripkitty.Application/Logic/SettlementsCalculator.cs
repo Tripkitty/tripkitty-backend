@@ -17,15 +17,42 @@ public static class SettlementsCalculator
             var share = e.Share;
             if (share.Count == 0) continue;
 
-            var perPerson = Math.Round(amount / share.Count, 2);
-
             bal.TryAdd(e.Payer, 0);
             bal[e.Payer] += amount;
 
-            foreach (var p in share)
+            switch (e.SplitType)
             {
-                bal.TryAdd(p, 0);
-                bal[p] -= perPerson;
+                case SplitType.Equal:
+                {
+                    var perPerson = Math.Round(amount / share.Count, 2);
+                    foreach (var entry in share)
+                    {
+                        bal.TryAdd(entry.ParticipantId, 0);
+                        bal[entry.ParticipantId] -= perPerson;
+                    }
+                    break;
+                }
+
+                case SplitType.ByShares:
+                {
+                    var totalWeight = share.Sum(s => s.Weight ?? 1);
+                    foreach (var entry in share)
+                    {
+                        bal.TryAdd(entry.ParticipantId, 0);
+                        bal[entry.ParticipantId] -= Math.Round(amount * (entry.Weight ?? 1) / totalWeight, 2);
+                    }
+                    break;
+                }
+
+                case SplitType.ByAmounts:
+                {
+                    foreach (var entry in share)
+                    {
+                        bal.TryAdd(entry.ParticipantId, 0);
+                        bal[entry.ParticipantId] -= (entry.AmountMinor ?? 0) / 100m;
+                    }
+                    break;
+                }
             }
         }
 
@@ -47,7 +74,6 @@ public static class SettlementsCalculator
         var credIdx = 0;
         var debtIdx = 0;
 
-        // Use mutable copies
         var credAmounts = creditors.Select(c => c.Amount).ToList();
         var debtAmounts = debtors.Select(d => d.Amount).ToList();
 

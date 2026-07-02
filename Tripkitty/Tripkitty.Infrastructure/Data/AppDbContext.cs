@@ -58,11 +58,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(u => u.Email).IsUnique();
         });
 
-        // Expense.Share stored as JSON
+        // Expense.Share stored as JSON, SplitType as int
         modelBuilder.Entity<Expense>(e =>
         {
-            e.Property(x => x.Share)
-                .HasColumnType("jsonb");
+            e.Property(x => x.Share).HasColumnType("jsonb");
+            e.Property(x => x.SplitType).HasConversion<int>();
         });
 
         // Trip → Owner

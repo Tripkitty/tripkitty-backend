@@ -118,7 +118,7 @@ public class ParticipantService(
         // 3. Remove participantId from all share arrays
         foreach (var expense in trip.Expenses)
         {
-            expense.Share = expense.Share.Where(s => s != participantId).ToList();
+            expense.Share = expense.Share.Where(s => s.ParticipantId != participantId).ToList();
         }
 
         // 4. Delete expenses where share is now empty

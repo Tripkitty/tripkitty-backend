@@ -138,7 +138,14 @@ public class TripService(
             t.Id, t.Name, t.Cur, t.OwnerId, t.Start, t.End, t.Version,
             t.Members.Select(m => new MemberDto(m.User.Id, m.User.Name, m.User.Handle, m.User.Email)).ToList(),
             t.Guests.Select(g => new GuestDto(g.Id, g.Name)).ToList(),
-            t.Expenses.Select(e => new ExpenseDto(e.Id, e.Title, e.AmountMinor / 100m, e.Payer, e.Share, e.CreatedBy)).ToList(),
+            t.Expenses.Select(e => new ExpenseDto(
+                e.Id, e.Title, e.AmountMinor / 100m, e.Payer,
+                e.Share.Select(s => new ShareEntryDto(
+                    s.ParticipantId, s.Weight,
+                    s.AmountMinor.HasValue ? s.AmountMinor.Value / 100m : null
+                )).ToList(),
+                e.SplitType, e.CreatedBy
+            )).ToList(),
             t.Events.Select(ev => new TripEventDto(
                 ev.Id, ev.Title,
                 ev.Date.ToString("yyyy-MM-dd"),

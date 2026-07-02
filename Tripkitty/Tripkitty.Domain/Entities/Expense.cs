@@ -8,6 +8,7 @@ public class Expense
     public string Title { get; set; } = "";
     public long AmountMinor { get; set; } // stored in minor units (e.g. kopeks)
     public string Payer { get; set; } = ""; // participantId
-    public List<string> Share { get; set; } = new(); // list of participantIds
+    public List<ShareEntry> Share { get; set; } = new();
+    public SplitType SplitType { get; set; } = SplitType.Equal;
     public string CreatedBy { get; set; } = ""; // userId
 }
