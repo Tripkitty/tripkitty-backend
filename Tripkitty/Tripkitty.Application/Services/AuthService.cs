@@ -93,10 +93,10 @@ public class AuthService(
     {
         var normalizedEmail = request.Email.ToLowerInvariant();
         var user = await userRepo.FindByEmailAsync(normalizedEmail)
-                   ?? throw new DomainException("INVALID_CREDENTIALS", "Invalid email or password");
+                   ?? throw new DomainException("USER_NOT_FOUND", "Пользователь с такой почтой не найден", "email");
 
         if (!passwordHasher.Verify(request.Password, user.PasswordHash))
-            throw new DomainException("INVALID_CREDENTIALS", "Invalid email or password");
+            throw new DomainException("WRONG_PASSWORD", "Неверный пароль", "password");
 
         var accessToken = jwtService.GenerateAccessToken(user);
         var refreshToken = await jwtService.GenerateRefreshTokenAsync(user.Id);
