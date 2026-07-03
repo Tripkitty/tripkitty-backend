@@ -105,6 +105,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasOne(r => r.User)
                 .WithMany()
                 .HasForeignKey(r => r.UserId);
+            e.HasIndex(r => r.TokenHash).IsUnique();
         });
 
         // PushSubscription → User

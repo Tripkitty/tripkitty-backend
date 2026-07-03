@@ -26,6 +26,7 @@ public interface IJwtService
     Task<string> GenerateRefreshTokenAsync(string userId);
     Task<User?> ValidateRefreshTokenAsync(string rawToken);
     Task RevokeRefreshTokenAsync(string rawToken);
+    Task<(User user, string newRawToken)> RotateRefreshTokenAsync(string rawToken);
 }
 
 public interface IUserRepository
@@ -109,13 +110,9 @@ public class AuthService(
 
     public async Task<AuthResponse> RefreshAsync(string refreshToken)
     {
-        var user = await jwtService.ValidateRefreshTokenAsync(refreshToken)
-                   ?? throw new DomainException("INVALID_TOKEN", "Refresh token is invalid or expired");
-
-        await jwtService.RevokeRefreshTokenAsync(refreshToken);
+        var (user, newRefreshToken) = await jwtService.RotateRefreshTokenAsync(refreshToken);
 
         var accessToken = jwtService.GenerateAccessToken(user);
-        var newRefreshToken = await jwtService.GenerateRefreshTokenAsync(user.Id);
 
         return new AuthResponse(
             new UserDto(user.Id, user.Name, user.Handle, user.Email),
