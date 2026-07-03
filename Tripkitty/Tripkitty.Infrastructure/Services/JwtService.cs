@@ -85,6 +85,34 @@ public class JwtService(AppDbContext db, IConfiguration configuration) : IJwtSer
         }
     }
 
+    public async Task<(User user, string newRawToken)> RotateRefreshTokenAsync(string rawToken)
+    {
+        var tokenHash = HashToken(rawToken);
+
+        var existing = await db.RefreshTokens
+            .Include(r => r.User)
+            .FirstOrDefaultAsync(r => r.TokenHash == tokenHash && !r.IsRevoked && r.ExpiresAt > DateTime.UtcNow)
+            ?? throw new Tripkitty.Domain.Exceptions.DomainException("INVALID_TOKEN", "Refresh token is invalid or expired");
+
+        existing.IsRevoked = true;
+
+        var newRawToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
+        var newHash = HashToken(newRawToken);
+
+        db.RefreshTokens.Add(new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            UserId = existing.UserId,
+            TokenHash = newHash,
+            ExpiresAt = DateTime.UtcNow.AddDays(RefreshTokenExpiryDays),
+            IsRevoked = false
+        });
+
+        await db.SaveChangesAsync();
+
+        return (existing.User, newRawToken);
+    }
+
     private static string HashToken(string raw)
     {
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(raw));
