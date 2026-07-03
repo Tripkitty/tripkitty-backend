@@ -48,16 +48,15 @@ public class ParticipantService(
         var targetUser = await userRepo.FindByIdAsync(targetUserId)
                          ?? throw new DomainException("NOT_FOUND", "User not found");
 
-        trip.Members.Add(new TripMember { TripId = tripId, UserId = targetUserId });
+        trip.Members.Add(new TripMember { TripId = tripId, UserId = targetUserId, User = targetUser });
         trip.Version++;
         await tripRepo.SaveChangesAsync();
 
         await pushService.NotifyAsync(targetUserId, "Вас добавили в поездку", trip.Name);
 
-        var dto = new GuestDto(targetUser.Id, targetUser.Name);
-        _ = notifier.MemberAddedAsync(tripId, dto);
-        _ = notifier.MemberInvitedAsync(targetUserId, tripId);
-        return dto;
+        await notifier.TripUpdatedAsync(tripId, TripService.MapToDetail(trip));
+        await notifier.MemberInvitedAsync(targetUserId, tripId);
+        return new GuestDto(targetUser.Id, targetUser.Name);
     }
 
     public async Task<GuestDto> AddGuestAsync(string tripId, string currentUserId, string guestName)
@@ -83,9 +82,8 @@ public class ParticipantService(
         trip.Version++;
         await tripRepo.SaveChangesAsync();
 
-        var dto = new GuestDto(guest.Id, guest.Name);
-        _ = notifier.MemberAddedAsync(tripId, dto);
-        return dto;
+        await notifier.TripUpdatedAsync(tripId, TripService.MapToDetail(trip));
+        return new GuestDto(guest.Id, guest.Name);
     }
 
     public async Task RemoveParticipantAsync(string tripId, string currentUserId, string participantId)
@@ -129,7 +127,7 @@ public class ParticipantService(
         trip.Version++;
         await tripRepo.SaveChangesAsync();
 
-        _ = notifier.ParticipantRemovedAsync(tripId, participantId);
+        await notifier.TripUpdatedAsync(tripId, TripService.MapToDetail(trip));
     }
 
     private static (string, string) Normalize(string a, string b) =>

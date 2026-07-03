@@ -19,8 +19,8 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Content Include="..\..\..\Caddyfile">
-        <Link>Properties\Caddyfile</Link>
+      <Content Include="..\..\..\DEPLOY.md">
+        <Link>Properties\DEPLOY.md</Link>
       </Content>
       <Content Include="..\..\..\docker-compose.yml">
         <Link>Properties\docker-compose.yml</Link>
