@@ -1,41 +1,56 @@
+using Microsoft.EntityFrameworkCore;
+using Serilog;
+using Tripkitty.Api.Endpoints;
+using Tripkitty.Api.Hubs;
+using Tripkitty.Api.Middleware;
+using Tripkitty.Application.Services;
+using Tripkitty.Infrastructure.Data;
+using Tripkitty.Infrastructure.Extensions;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
+builder.Host.UseSerilog((ctx, lc) => lc.ReadFrom.Configuration(ctx.Configuration));
+
 builder.Services.AddOpenApi();
+builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddSignalR();
+builder.Services.AddScoped<ITripNotifier, SignalRTripNotifier>();
+builder.Services.AddScoped<IFriendNotifier, SignalRFriendNotifier>();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.Migrate();
+
+    if (app.Environment.IsDevelopment() || Environment.GetEnvironmentVariable("SEED_TEST_USERS") == "true")
+        await DevSeeder.SeedAsync(scope.ServiceProvider);
+}
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
 
-app.UseHttpsRedirection();
+app.UseMiddleware<ExceptionMiddleware>();
 
-var summaries = new[]
+app.UseCors();
+
+if (app.Environment.IsDevelopment())
 {
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+    app.UseHttpsRedirection();
+}
 
-app.MapGet("/weatherforecast", () =>
-    {
-        var forecast = Enumerable.Range(1, 5).Select(index =>
-                new WeatherForecast
-                (
-                    DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-                    Random.Shared.Next(-20, 55),
-                    summaries[Random.Shared.Next(summaries.Length)]
-                ))
-            .ToArray();
-        return forecast;
-    })
-    .WithName("GetWeatherForecast");
+app.UseAuthentication();
+app.UseAuthorization();
+
+app.MapAuthEndpoints();
+app.MapTripEndpoints();
+app.MapFriendEndpoints();
+app.MapNotificationEndpoints();
+app.MapCalendarEndpoints();
+app.MapHub<TripHub>("/hubs/trip");
+app.MapHealthChecks("/health");
 
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
