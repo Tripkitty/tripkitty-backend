@@ -23,8 +23,8 @@ public class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionMiddlewa
 
     private static readonly HashSet<string> UnprocessableCodes = new()
     {
-        "SELF_REQUEST", "INVALID_PAYER", "INVALID_SHARE", "INVALID_CREDENTIALS",
-        "INVALID_TOKEN", "VERSION_CONFLICT"
+        "SELF_REQUEST", "INVALID_PAYER", "INVALID_SHARE", "USER_NOT_FOUND",
+        "WRONG_PASSWORD", "INVALID_TOKEN", "VERSION_CONFLICT"
     };
 
     public async Task InvokeAsync(HttpContext context)

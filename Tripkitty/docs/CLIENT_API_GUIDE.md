@@ -60,8 +60,9 @@
 { "email": "anya@example.com", "password": "secret123" }
 ```
 
-Ответ — та же структура `{ user, tokens }`. Ошибка неверных данных:
-`INVALID_CREDENTIALS` (422).
+Ответ — та же структура `{ user, tokens }`. Ошибки (обе 422):
+`USER_NOT_FOUND` (`field: "email"`) — аккаунта с такой почтой нет;
+`WRONG_PASSWORD` (`field: "password"`) — пароль не подошёл.
 
 ### 1.4 Обновление токенов
 
@@ -132,7 +133,7 @@
 | `403 Forbidden` | `FORBIDDEN` |
 | `404 Not Found` | `NOT_FOUND` |
 | `409 Conflict` | `HANDLE_TAKEN`, `EMAIL_TAKEN`, `ALREADY_FRIENDS`, `REQUEST_EXISTS`, `ALREADY_MEMBER` |
-| `422 Unprocessable Entity` | `SELF_REQUEST`, `INVALID_PAYER`, `INVALID_SHARE`, `INVALID_CREDENTIALS`, `INVALID_TOKEN`, `VERSION_CONFLICT` |
+| `422 Unprocessable Entity` | `SELF_REQUEST`, `INVALID_PAYER`, `INVALID_SHARE`, `USER_NOT_FOUND`, `WRONG_PASSWORD`, `INVALID_TOKEN`, `VERSION_CONFLICT` |
 | `500 Internal Server Error` | `INTERNAL_ERROR` |
 | `401 Unauthorized` | отсутствует/просрочен access-токен (тело без `error`-обёртки — это ответ middleware аутентификации) |
 

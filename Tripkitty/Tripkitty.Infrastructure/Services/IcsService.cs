@@ -53,17 +53,14 @@ public class IcsService : IIcsService
 
             if (ev.Time.HasValue)
             {
-                sb.AppendLine($"DTSTART:{ev.Date:yyyyMMdd}T{ev.Time.Value:HHmmss}");
-                if (ev.EndTime.HasValue)
-                {
-                    sb.AppendLine($"DTEND:{ev.Date:yyyyMMdd}T{ev.EndTime.Value:HHmmss}");
-                }
-                else
-                {
-                    // Default 1 hour duration
-                    var endTime = ev.Time.Value.AddHours(1);
-                    sb.AppendLine($"DTEND:{ev.Date:yyyyMMdd}T{endTime:HHmmss}");
-                }
+                var start = ev.Date.ToDateTime(ev.Time.Value);
+                // Default 1 hour duration
+                var end = ev.EndTime.HasValue ? ev.Date.ToDateTime(ev.EndTime.Value) : start.AddHours(1);
+                // EndTime "раньше" начала ⇒ событие заканчивается на следующий день
+                if (end <= start) end = end.AddDays(1);
+
+                sb.AppendLine($"DTSTART:{start:yyyyMMddTHHmmss}");
+                sb.AppendLine($"DTEND:{end:yyyyMMddTHHmmss}");
             }
             else
             {

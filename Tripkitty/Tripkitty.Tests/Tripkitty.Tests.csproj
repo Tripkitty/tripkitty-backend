@@ -24,6 +24,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Tripkitty.Application\Tripkitty.Application.csproj" />
     <ProjectReference Include="..\Tripkitty.Domain\Tripkitty.Domain.csproj" />
+    <ProjectReference Include="..\Tripkitty.Infrastructure\Tripkitty.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>
