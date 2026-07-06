@@ -5,10 +5,10 @@ using Tripkitty.Infrastructure.Data;
 
 public static class DevSeeder
 {
-    private static readonly (string Handle, string Name, string Email, string Password)[] TestUsers =
+    private static readonly (string Handle, string LastName, string FirstName, string Email, string Password)[] TestUsers =
     [
-        ("test1", "Test User 1", "test1@test.local", "testtest1"),
-        ("test2", "Test User 2", "test2@test.local", "testtest2"),
+        ("test1", "User", "Test1", "test1@test.local", "testtest1"),
+        ("test2", "User", "Test2", "test2@test.local", "testtest2"),
     ];
 
     public static async Task SeedAsync(IServiceProvider services)
@@ -24,12 +24,13 @@ public static class DevSeeder
         var toSeed = TestUsers.Where(t => !existingHandles.Contains(t.Handle)).ToList();
         if (toSeed.Count == 0) return;
 
-        foreach (var (handle, name, email, password) in toSeed)
+        foreach (var (handle, lastName, firstName, email, password) in toSeed)
         {
             db.Users.Add(new User
             {
                 Handle = handle,
-                Name = name,
+                LastName = lastName,
+                FirstName = firstName,
                 Email = email,
                 PasswordHash = hasher.Hash(password),
             });

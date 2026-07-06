@@ -7,7 +7,7 @@ namespace Tripkitty.Application.Services;
 public interface IParticipantService
 {
     Task<GuestDto> AddMemberAsync(string tripId, string currentUserId, string targetUserId);
-    Task<GuestDto> AddGuestAsync(string tripId, string currentUserId, string guestName);
+    Task<GuestDto> AddGuestAsync(string tripId, string currentUserId, AddGuestRequest request);
     Task RemoveParticipantAsync(string tripId, string currentUserId, string participantId);
 }
 
@@ -56,10 +56,10 @@ public class ParticipantService(
 
         await notifier.TripUpdatedAsync(tripId, TripService.MapToDetail(trip));
         await notifier.MemberInvitedAsync(targetUserId, tripId);
-        return new GuestDto(targetUser.Id, targetUser.Name);
+        return GuestDto.From(targetUser);
     }
 
-    public async Task<GuestDto> AddGuestAsync(string tripId, string currentUserId, string guestName)
+    public async Task<GuestDto> AddGuestAsync(string tripId, string currentUserId, AddGuestRequest request)
     {
         var trip = await tripRepo.GetByIdWithDetailsAsync(tripId)
                    ?? throw new DomainException("NOT_FOUND", "Trip not found");
@@ -68,13 +68,18 @@ public class ParticipantService(
         if (!isMember)
             throw new DomainException("FORBIDDEN", "You are not a member of this trip");
 
-        if (string.IsNullOrWhiteSpace(guestName))
-            throw new DomainException("VALIDATION_ERROR", "Guest name is required", "name");
+        if (string.IsNullOrWhiteSpace(request.LastName))
+            throw new DomainException("VALIDATION_ERROR", "Укажите фамилию гостя", "lastName");
+
+        if (string.IsNullOrWhiteSpace(request.FirstName))
+            throw new DomainException("VALIDATION_ERROR", "Укажите имя гостя", "firstName");
 
         var guest = new Guest
         {
             Id = $"g_{Guid.NewGuid():N}",
-            Name = guestName.Trim(),
+            LastName = request.LastName.Trim(),
+            FirstName = request.FirstName.Trim(),
+            MiddleName = string.IsNullOrWhiteSpace(request.MiddleName) ? null : request.MiddleName.Trim(),
             TripId = tripId
         };
 
@@ -83,7 +88,7 @@ public class ParticipantService(
         await tripRepo.SaveChangesAsync();
 
         await notifier.TripUpdatedAsync(tripId, TripService.MapToDetail(trip));
-        return new GuestDto(guest.Id, guest.Name);
+        return GuestDto.From(guest);
     }
 
     public async Task RemoveParticipantAsync(string tripId, string currentUserId, string participantId)

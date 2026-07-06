@@ -48,8 +48,11 @@ public class AuthService(
 
     public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.Name))
-            throw new DomainException("VALIDATION_ERROR", "Name is required", "name");
+        if (string.IsNullOrWhiteSpace(request.LastName))
+            throw new DomainException("VALIDATION_ERROR", "Укажите фамилию", "lastName");
+
+        if (string.IsNullOrWhiteSpace(request.FirstName))
+            throw new DomainException("VALIDATION_ERROR", "Укажите имя", "firstName");
 
         if (!HandleRegex.IsMatch(request.Handle))
             throw new DomainException("VALIDATION_ERROR", "Handle must be 3-20 lowercase alphanumeric or underscore characters", "handle");
@@ -72,7 +75,9 @@ public class AuthService(
         var user = new User
         {
             Id = $"u_{Guid.NewGuid():N}",
-            Name = request.Name.Trim(),
+            LastName = request.LastName.Trim(),
+            FirstName = request.FirstName.Trim(),
+            MiddleName = string.IsNullOrWhiteSpace(request.MiddleName) ? null : request.MiddleName.Trim(),
             Handle = normalizedHandle,
             Email = normalizedEmail,
             PasswordHash = passwordHasher.Hash(request.Password)
@@ -85,7 +90,7 @@ public class AuthService(
         var refreshToken = await jwtService.GenerateRefreshTokenAsync(user.Id);
 
         return new AuthResponse(
-            new UserDto(user.Id, user.Name, user.Handle, user.Email),
+            UserDto.From(user),
             new TokensDto(accessToken, refreshToken)
         );
     }
@@ -103,7 +108,7 @@ public class AuthService(
         var refreshToken = await jwtService.GenerateRefreshTokenAsync(user.Id);
 
         return new AuthResponse(
-            new UserDto(user.Id, user.Name, user.Handle, user.Email),
+            UserDto.From(user),
             new TokensDto(accessToken, refreshToken)
         );
     }
@@ -115,7 +120,7 @@ public class AuthService(
         var accessToken = jwtService.GenerateAccessToken(user);
 
         return new AuthResponse(
-            new UserDto(user.Id, user.Name, user.Handle, user.Email),
+            UserDto.From(user),
             new TokensDto(accessToken, newRefreshToken)
         );
     }
@@ -130,6 +135,6 @@ public class AuthService(
         var user = await userRepo.FindByIdAsync(userId)
                    ?? throw new DomainException("NOT_FOUND", "User not found");
 
-        return new UserDto(user.Id, user.Name, user.Handle, user.Email);
+        return UserDto.From(user);
     }
 }

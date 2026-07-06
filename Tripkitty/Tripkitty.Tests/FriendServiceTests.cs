@@ -24,7 +24,7 @@ public class FriendServiceTests
     [Fact]
     public async Task SearchByHandle_StripsPrefixAndLowercases()
     {
-        _userRepo.FindByHandleAsync("anya").Returns(new User { Id = "u_1", Name = "Anya", Handle = "anya", Email = "a@b.com" });
+        _userRepo.FindByHandleAsync("anya").Returns(new User { Id = "u_1", FirstName = "Anya", Handle = "anya", Email = "a@b.com" });
 
         var result = await _sut.SearchByHandleAsync("@ANYA");
 
@@ -107,7 +107,7 @@ public class FriendServiceTests
             Status = FriendshipStatus.Pending
         };
         _friendRepo.FindAsync("u_1", "u_2").Returns(friendship);
-        _userRepo.FindByIdAsync("u_1").Returns(new User { Id = "u_1", Name = "Alice" });
+        _userRepo.FindByIdAsync("u_1").Returns(new User { Id = "u_1", FirstName = "Alice" });
 
         await _sut.SendRequestAsync("u_1", new SendFriendRequestRequest(null, "u_2"));
 
@@ -119,8 +119,8 @@ public class FriendServiceTests
     public async Task SendRequest_CreatesNewFriendship_WhenNoExisting()
     {
         _friendRepo.FindAsync(Arg.Any<string>(), Arg.Any<string>()).Returns((Friendship?)null);
-        _userRepo.FindByIdAsync("u_2").Returns(new User { Id = "u_2", Name = "Bob" });
-        _userRepo.FindByIdAsync("u_1").Returns(new User { Id = "u_1", Name = "Alice" });
+        _userRepo.FindByIdAsync("u_2").Returns(new User { Id = "u_2", FirstName = "Bob" });
+        _userRepo.FindByIdAsync("u_1").Returns(new User { Id = "u_1", FirstName = "Alice" });
 
         await _sut.SendRequestAsync("u_1", new SendFriendRequestRequest(null, "u_2"));
 
@@ -134,7 +134,7 @@ public class FriendServiceTests
     public async Task SendRequest_NormalizesIds_SmallestFirst()
     {
         _friendRepo.FindAsync(Arg.Any<string>(), Arg.Any<string>()).Returns((Friendship?)null);
-        _userRepo.FindByIdAsync(Arg.Any<string>()).Returns(new User { Id = "zzz", Name = "Z" });
+        _userRepo.FindByIdAsync(Arg.Any<string>()).Returns(new User { Id = "zzz", FirstName = "Z" });
 
         await _sut.SendRequestAsync("zzz", new SendFriendRequestRequest(null, "aaa"));
 
@@ -171,7 +171,7 @@ public class FriendServiceTests
             Status = FriendshipStatus.Pending
         };
         _friendRepo.FindAsync("u_1", "u_2").Returns(friendship);
-        _userRepo.FindByIdAsync("u_1").Returns(new User { Id = "u_1", Name = "Alice" });
+        _userRepo.FindByIdAsync("u_1").Returns(new User { Id = "u_1", FirstName = "Alice" });
 
         await _sut.AcceptAsync("u_1", "u_2");
 
@@ -220,10 +220,10 @@ public class FriendServiceTests
     [Fact]
     public async Task GetFriends_CorrectlyCategorizes_IncomingOutgoingAccepted()
     {
-        var alice = new User { Id = "u_alice", Name = "Alice", Handle = "alice", Email = "a@b.com" };
-        var bob   = new User { Id = "u_bob",   Name = "Bob",   Handle = "bob",   Email = "b@b.com" };
-        var carol = new User { Id = "u_carol", Name = "Carol", Handle = "carol", Email = "c@b.com" };
-        var dave  = new User { Id = "u_dave",  Name = "Dave",  Handle = "dave",  Email = "d@b.com" };
+        var alice = new User { Id = "u_alice", FirstName = "Alice", Handle = "alice", Email = "a@b.com" };
+        var bob   = new User { Id = "u_bob",   FirstName = "Bob",   Handle = "bob",   Email = "b@b.com" };
+        var carol = new User { Id = "u_carol", FirstName = "Carol", Handle = "carol", Email = "c@b.com" };
+        var dave  = new User { Id = "u_dave",  FirstName = "Dave",  Handle = "dave",  Email = "d@b.com" };
 
         // alice <-> bob: accepted
         var f1 = new Friendship { UserAId = "u_alice", UserBId = "u_bob", RequestedById = "u_alice", Status = FriendshipStatus.Accepted, UserA = alice, UserB = bob };

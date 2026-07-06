@@ -137,8 +137,8 @@ public class TripService(
     public static TripDetailDto MapToDetail(Trip t) =>
         new(
             t.Id, t.Name, t.Cur, t.OwnerId, t.Start, t.End, t.Version,
-            t.Members.Select(m => new MemberDto(m.User.Id, m.User.Name, m.User.Handle, m.User.Email)).ToList(),
-            t.Guests.Select(g => new GuestDto(g.Id, g.Name)).ToList(),
+            t.Members.Select(m => MemberDto.From(m.User)).ToList(),
+            t.Guests.Select(g => GuestDto.From(g)).ToList(),
             t.Expenses.Select(e => new ExpenseDto(
                 e.Id, e.Title, e.AmountMinor / 100m, e.Payer,
                 e.Share.Select(s => new ShareEntryDto(

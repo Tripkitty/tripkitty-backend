@@ -34,23 +34,41 @@
 
 ```json
 {
-  "name": "Аня",
+  "lastName": "Иванова",
+  "firstName": "Аня",
+  "middleName": "Петровна",
   "handle": "anya",
   "email": "anya@example.com",
   "password": "secret123"
 }
 ```
 
+`lastName` и `firstName` обязательны, `middleName` опционально (можно `null`
+или не передавать вовсе).
+
 Ответ `200`:
 
 ```json
 {
-  "user": { "id": "u_...", "name": "Аня", "handle": "anya", "email": "anya@example.com" },
+  "user": {
+    "id": "u_...",
+    "name": "Аня Иванова",
+    "lastName": "Иванова",
+    "firstName": "Аня",
+    "middleName": "Петровна",
+    "handle": "anya",
+    "email": "anya@example.com"
+  },
   "tokens": { "accessToken": "eyJ...", "refreshToken": "..." }
 }
 ```
 
-Возможные ошибки: `HANDLE_TAKEN` (409), `EMAIL_TAKEN` (409), `VALIDATION_ERROR` (400).
+`name` — вычисляемое сервером отображаемое имя («Имя Фамилия», без отчества) —
+удобно для прямого вывода в UI. Оно присутствует во всех объектах пользователя
+(`user`, `members[]`, `friends[]`) наряду с `lastName`/`firstName`/`middleName`.
+
+Возможные ошибки: `HANDLE_TAKEN` (409), `EMAIL_TAKEN` (409), `VALIDATION_ERROR`
+(400, `field`: `lastName` / `firstName` / `handle` / `email` / `password`).
 
 ### 1.3 Вход
 
@@ -87,7 +105,7 @@
 `GET /auth/me` (требует `Authorization`). Ответ:
 
 ```json
-{ "user": { "id": "u_...", "name": "Аня", "handle": "anya", "email": "..." } }
+{ "user": { "id": "u_...", "name": "Аня Иванова", "lastName": "Иванова", "firstName": "Аня", "middleName": "Петровна", "handle": "anya", "email": "..." } }
 ```
 
 ### 1.7 Рекомендуемый паттерн HTTP-клиента
@@ -190,8 +208,8 @@
   "start": "2026-07-01",
   "end": "2026-07-10",
   "version": 4,
-  "members": [ { "id": "u_...", "name": "Аня", "handle": "anya", "email": "..." } ],
-  "guests":  [ { "id": "g_...", "name": "Петя" } ],
+  "members": [ { "id": "u_...", "name": "Аня Иванова", "lastName": "Иванова", "firstName": "Аня", "middleName": "Петровна", "handle": "anya", "email": "..." } ],
+  "guests":  [ { "id": "g_...", "name": "Петя Сидоров", "lastName": "Сидоров", "firstName": "Петя", "middleName": null } ],
   "expenses":[ { "id": "...", "title": "Такси", "amount": 1200.50, "payer": "u_...", "share": [{"participantId":"u_..."},{"participantId":"g_..."}], "splitType": 0, "createdBy": "u_..." } ],
   "events":  [ { "id": "...", "title": "Заезд", "date": "2026-07-01", "time": "14:00", "endTime": null, "createdBy": "u_..." } ]
 }
@@ -251,10 +269,12 @@ If-Match: 4
 `POST /trips/{id}/guests`
 
 ```json
-{ "name": "Петя" }
+{ "lastName": "Сидоров", "firstName": "Петя", "middleName": null }
 ```
 
-Ответ `{ "guest": { "id": "g_...", "name": "Петя" } }`.
+`lastName` и `firstName` обязательны, `middleName` опционально.
+
+Ответ `{ "guest": { "id": "g_...", "name": "Петя Сидоров", "lastName": "Сидоров", "firstName": "Петя", "middleName": null } }`.
 
 ### 4.3 Удалить участника (каскад!)
 
@@ -427,7 +447,7 @@ If-Match: 4
 
 `GET /users/search?handle=anya` (символ `@` можно опускать, регистр не важен).
 
-- Найден: `{ "user": { "id", "name", "handle", "email" } }`.
+- Найден: `{ "user": { "id", "name", "lastName", "firstName", "middleName", "handle", "email" } }`.
 - Не найден: `404` `{ "error": { "code": "NOT_FOUND", ... } }`.
 
 ### 7.2 Списки
@@ -445,6 +465,9 @@ If-Match: 4
 - `friends` — принятые;
 - `incoming` — входящие запросы (вам прислали);
 - `outgoing` — исходящие запросы (вы отправили).
+
+`FriendDto` — та же форма, что и `user`:
+`{ "id", "name", "lastName", "firstName", "middleName", "handle", "email" }`.
 
 ### 7.3 Отправить запрос
 
