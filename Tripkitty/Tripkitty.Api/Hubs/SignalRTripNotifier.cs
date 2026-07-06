@@ -4,16 +4,25 @@ using Tripkitty.Application.Services;
 
 namespace Tripkitty.Api.Hubs;
 
-public class SignalRTripNotifier(IHubContext<TripHub> hub) : ITripNotifier
+public class SignalRTripNotifier(IHubContext<TripHub> hub, ILogger<SignalRTripNotifier> logger) : ITripNotifier
 {
-    public Task TripUpdatedAsync(string tripId, TripDetailDto trip) =>
-        hub.Clients.Group(tripId).SendAsync("trip:updated", trip);
+    public Task TripUpdatedAsync(string tripId, TripDetailDto trip)
+    {
+        logger.LogInformation("SignalR send trip:updated to group {TripId}", tripId);
+        return hub.Clients.Group(tripId).SendAsync("trip:updated", trip);
+    }
 
-    public Task TripDeletedAsync(string tripId) =>
-        hub.Clients.Group(tripId).SendAsync("trip:deleted", new { tripId });
+    public Task TripDeletedAsync(string tripId)
+    {
+        logger.LogInformation("SignalR send trip:deleted to group {TripId}", tripId);
+        return hub.Clients.Group(tripId).SendAsync("trip:deleted", new { tripId });
+    }
 
-    public Task ExpenseAddedAsync(string tripId, ExpenseDto expense) =>
-        hub.Clients.Group(tripId).SendAsync("expense:added", new { tripId, expense });
+    public Task ExpenseAddedAsync(string tripId, ExpenseDto expense)
+    {
+        logger.LogInformation("SignalR send expense:added to group {TripId} expense={ExpenseId}", tripId, expense.Id);
+        return hub.Clients.Group(tripId).SendAsync("expense:added", new { tripId, expense });
+    }
 
     public Task ExpenseRemovedAsync(string tripId, string expenseId) =>
         hub.Clients.Group(tripId).SendAsync("expense:removed", new { tripId, expenseId });
@@ -27,8 +36,11 @@ public class SignalRTripNotifier(IHubContext<TripHub> hub) : ITripNotifier
     public Task ParticipantRemovedAsync(string tripId, string participantId) =>
         hub.Clients.Group(tripId).SendAsync("participant:removed", new { tripId, participantId });
 
-    public Task EventAddedAsync(string tripId, TripEventDto ev) =>
-        hub.Clients.Group(tripId).SendAsync("event:added", new { tripId, @event = ev });
+    public Task EventAddedAsync(string tripId, TripEventDto ev)
+    {
+        logger.LogInformation("SignalR send event:added to group {TripId} event={EventId}", tripId, ev.Id);
+        return hub.Clients.Group(tripId).SendAsync("event:added", new { tripId, @event = ev });
+    }
 
     public Task EventRemovedAsync(string tripId, string eventId) =>
         hub.Clients.Group(tripId).SendAsync("event:removed", new { tripId, eventId });

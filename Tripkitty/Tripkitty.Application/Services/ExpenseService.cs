@@ -86,7 +86,7 @@ public class ExpenseService(
                 $"{trip.Name}: {expense.Title} — {request.Amount:F2}");
 
         var dto = MapToDto(expense, request.Amount);
-        _ = notifier.ExpenseAddedAsync(tripId, dto);
+        await notifier.ExpenseAddedAsync(tripId, dto);
         return dto;
     }
 

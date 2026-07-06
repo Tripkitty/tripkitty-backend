@@ -31,6 +31,9 @@
       <Content Include="..\docs\CLIENT_API_GUIDE.md">
         <Link>Properties\CLIENT_API_GUIDE.md</Link>
       </Content>
+      <Content Include="..\docs\SETTLEMENTS_ALGORITHM.md">
+        <Link>Properties\SETTLEMENTS_ALGORITHM.md</Link>
+      </Content>
       <Content Include="..\scripts\transfer_guest_expenses.sql">
         <Link>Properties\transfer_guest_expenses.sql</Link>
       </Content>
