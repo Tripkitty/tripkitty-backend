@@ -77,7 +77,7 @@ public class EventService(
             await pushService.NotifyManyAsync(otherMemberIds, "Новое мероприятие",
                 $"{trip.Name}: {ev.Title} — {date:d MMMM}");
 
-        _ = notifier.EventAddedAsync(tripId, dto);
+        await notifier.EventAddedAsync(tripId, dto);
         return dto;
     }
 
