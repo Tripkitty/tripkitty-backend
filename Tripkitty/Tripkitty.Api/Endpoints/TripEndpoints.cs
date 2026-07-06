@@ -75,7 +75,7 @@ public static class TripEndpoints
             IParticipantService participantService) =>
         {
             var userId = GetUserId(user);
-            var guest = await participantService.AddGuestAsync(id, userId, request.Name);
+            var guest = await participantService.AddGuestAsync(id, userId, request);
             return Results.Ok(new { guest });
         });
 

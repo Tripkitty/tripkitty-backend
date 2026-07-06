@@ -3,7 +3,12 @@ namespace Tripkitty.Domain.Entities;
 public class Guest
 {
     public string Id { get; set; } = $"g_{Guid.NewGuid():N}";
-    public string Name { get; set; } = "";
+    public string LastName { get; set; } = "";
+    public string FirstName { get; set; } = "";
+    public string? MiddleName { get; set; }
     public string TripId { get; set; } = "";
     public Trip Trip { get; set; } = null!;
+
+    // Не маппится в EF (нет сеттера) — отображаемое имя для DTO
+    public string DisplayName => string.IsNullOrEmpty(LastName) ? FirstName : $"{FirstName} {LastName}";
 }
