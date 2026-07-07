@@ -12,6 +12,7 @@ public interface IAuthService
     Task<AuthResponse> RefreshAsync(string refreshToken);
     Task LogoutAsync(string refreshToken);
     Task<UserDto> GetMeAsync(string userId);
+    Task<UserDto> UpdateProfileAsync(string userId, UpdateProfileRequest request);
 }
 
 public interface IPasswordHasher
@@ -134,6 +135,33 @@ public class AuthService(
     {
         var user = await userRepo.FindByIdAsync(userId)
                    ?? throw new DomainException("NOT_FOUND", "User not found");
+
+        return UserDto.From(user);
+    }
+
+    public async Task<UserDto> UpdateProfileAsync(string userId, UpdateProfileRequest request)
+    {
+        var user = await userRepo.FindByIdAsync(userId)
+                   ?? throw new DomainException("NOT_FOUND", "User not found");
+
+        if (request.LastName is not null)
+        {
+            if (string.IsNullOrWhiteSpace(request.LastName))
+                throw new DomainException("VALIDATION_ERROR", "Укажите фамилию", "lastName");
+            user.LastName = request.LastName.Trim();
+        }
+
+        if (request.FirstName is not null)
+        {
+            if (string.IsNullOrWhiteSpace(request.FirstName))
+                throw new DomainException("VALIDATION_ERROR", "Укажите имя", "firstName");
+            user.FirstName = request.FirstName.Trim();
+        }
+
+        if (request.MiddleName is not null)
+            user.MiddleName = string.IsNullOrWhiteSpace(request.MiddleName) ? null : request.MiddleName.Trim();
+
+        await userRepo.SaveChangesAsync();
 
         return UserDto.From(user);
     }

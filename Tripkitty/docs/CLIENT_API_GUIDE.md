@@ -108,6 +108,22 @@
 { "user": { "id": "u_...", "name": "Аня Иванова", "lastName": "Иванова", "firstName": "Аня", "middleName": "Петровна", "handle": "anya", "email": "..." } }
 ```
 
+### 1.6a Редактирование своего профиля (ФИО)
+
+`PATCH /auth/me` (требует `Authorization`). Частичное обновление ФИО — передавайте
+только изменяемые поля. Тело:
+
+```json
+{ "lastName": "Иванова", "firstName": "Аня", "middleName": "Петровна" }
+```
+
+- Любое из полей можно опустить (`null`) — оно не изменится.
+- `lastName`/`firstName` при передаче не могут быть пустыми (`VALIDATION_ERROR`).
+- `middleName: ""` — сбросить отчество.
+
+Ответ — тот же конверт, что у `GET /auth/me`: `{ "user": UserDto }`. Реквизиты СБП
+профиля редактируются отдельно через `/me/payment-methods` (см. §10).
+
 ### 1.7 Рекомендуемый паттерн HTTP-клиента
 
 Оберните fetch/axios в интерсептор:
@@ -149,7 +165,7 @@
 |------|------|
 | `400 Bad Request` | `VALIDATION_ERROR` |
 | `403 Forbidden` | `FORBIDDEN` |
-| `404 Not Found` | `NOT_FOUND`, `PAYMENT_METHOD_NOT_FOUND` |
+| `404 Not Found` | `NOT_FOUND`, `PAYMENT_METHOD_NOT_FOUND`, `GUEST_NOT_FOUND` |
 | `409 Conflict` | `HANDLE_TAKEN`, `EMAIL_TAKEN`, `ALREADY_FRIENDS`, `REQUEST_EXISTS`, `ALREADY_MEMBER` |
 | `422 Unprocessable Entity` | `SELF_REQUEST`, `INVALID_PAYER`, `INVALID_SHARE`, `USER_NOT_FOUND`, `WRONG_PASSWORD`, `INVALID_TOKEN`, `VERSION_CONFLICT`, `INVALID_PHONE`, `INVALID_BANK` |
 | `500 Internal Server Error` | `INTERNAL_ERROR` |
@@ -283,6 +299,29 @@ If-Match: 4
 кодов из `GET /banks` (иначе `INVALID_BANK`).
 
 Ответ `{ "guest": { "id": "g_...", "name": "Петя Сидоров", ..., "paymentDetails": { ... } } }`.
+
+### 4.2a Редактировать гостя (ФИО + реквизиты)
+
+`PATCH /trips/{id}/guests/{guestId}` — доступно любому участнику поездки.
+Частичное обновление:
+
+```json
+{
+  "lastName": "Сидоров",
+  "firstName": "Пётр",
+  "middleName": "",
+  "paymentDetails": { "phone": "+79991234567", "banks": ["SBER"], "label": null },
+  "clearPayment": false
+}
+```
+
+- ФИО: любое поле можно опустить (`null`) — не изменится; `lastName`/`firstName`
+  при передаче не могут быть пустыми; `middleName: ""` — сбросить отчество.
+- Реквизиты: `paymentDetails` (не `null`) — задать/заменить; `clearPayment: true` —
+  сбросить реквизиты; если не передано ни то, ни другое — реквизиты не меняются.
+
+Ответ `{ "guest": GuestDto }`. Мутация шлёт `trip:updated` по SignalR и повышает
+`version` поездки. Ошибка `GUEST_NOT_FOUND` (404), если гостя нет в поездке.
 
 ### 4.3 Удалить участника (каскад!)
 

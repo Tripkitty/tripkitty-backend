@@ -9,6 +9,7 @@ public interface IParticipantService
 {
     Task<GuestDto> AddMemberAsync(string tripId, string currentUserId, string targetUserId);
     Task<GuestDto> AddGuestAsync(string tripId, string currentUserId, AddGuestRequest request);
+    Task<GuestDto> UpdateGuestAsync(string tripId, string currentUserId, string guestId, UpdateGuestRequest request);
     Task RemoveParticipantAsync(string tripId, string currentUserId, string participantId);
     Task<TripPaymentDto> GetMyPaymentAsync(string tripId, string userId);
     Task<TripPaymentDto> SetMyPaymentAsync(string tripId, string userId, PaymentDetailsRequest? request);
@@ -89,6 +90,47 @@ public class ParticipantService(
         };
 
         trip.Guests.Add(guest);
+        trip.Version++;
+        await tripRepo.SaveChangesAsync();
+
+        await notifier.TripUpdatedAsync(tripId, TripService.MapToDetail(trip));
+        return GuestDto.From(guest);
+    }
+
+    public async Task<GuestDto> UpdateGuestAsync(string tripId, string currentUserId, string guestId, UpdateGuestRequest request)
+    {
+        var trip = await tripRepo.GetByIdWithDetailsAsync(tripId)
+                   ?? throw new DomainException("NOT_FOUND", "Trip not found");
+
+        var isMember = trip.Members.Any(m => m.UserId == currentUserId);
+        if (!isMember)
+            throw new DomainException("FORBIDDEN", "You are not a member of this trip");
+
+        var guest = trip.Guests.FirstOrDefault(g => g.Id == guestId)
+                    ?? throw new DomainException("GUEST_NOT_FOUND", "Гость не найден");
+
+        if (request.LastName is not null)
+        {
+            if (string.IsNullOrWhiteSpace(request.LastName))
+                throw new DomainException("VALIDATION_ERROR", "Укажите фамилию гостя", "lastName");
+            guest.LastName = request.LastName.Trim();
+        }
+
+        if (request.FirstName is not null)
+        {
+            if (string.IsNullOrWhiteSpace(request.FirstName))
+                throw new DomainException("VALIDATION_ERROR", "Укажите имя гостя", "firstName");
+            guest.FirstName = request.FirstName.Trim();
+        }
+
+        if (request.MiddleName is not null)
+            guest.MiddleName = string.IsNullOrWhiteSpace(request.MiddleName) ? null : request.MiddleName.Trim();
+
+        if (request.PaymentDetails is not null)
+            guest.PaymentDetails = PaymentDetailsFactory.FromRequest(request.PaymentDetails);
+        else if (request.ClearPayment)
+            guest.PaymentDetails = null;
+
         trip.Version++;
         await tripRepo.SaveChangesAsync();
 

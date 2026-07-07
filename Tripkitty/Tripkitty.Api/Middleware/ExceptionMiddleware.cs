@@ -13,7 +13,7 @@ public class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionMiddlewa
 
     private static readonly HashSet<string> NotFoundCodes = new()
     {
-        "NOT_FOUND", "PAYMENT_METHOD_NOT_FOUND"
+        "NOT_FOUND", "PAYMENT_METHOD_NOT_FOUND", "GUEST_NOT_FOUND"
     };
 
     private static readonly HashSet<string> ForbiddenCodes = new()

@@ -79,6 +79,14 @@ public static class TripEndpoints
             return Results.Ok(new { guest });
         });
 
+        group.MapPatch("/{id}/guests/{guestId}", async (string id, string guestId, UpdateGuestRequest request,
+            ClaimsPrincipal user, IParticipantService participantService) =>
+        {
+            var userId = GetUserId(user);
+            var guest = await participantService.UpdateGuestAsync(id, userId, guestId, request);
+            return Results.Ok(new { guest });
+        });
+
         group.MapDelete("/{id}/participants/{participantId}", async (string id, string participantId,
             ClaimsPrincipal user, IParticipantService participantService) =>
         {
