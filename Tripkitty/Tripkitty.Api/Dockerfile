@@ -24,6 +24,9 @@ ARG BUILD_CONFIGURATION=Release
 RUN dotnet publish "./Tripkitty.Api.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
 
 FROM base AS final
+USER root
+RUN mkdir -p /app/logs && chown $APP_UID /app/logs
+USER $APP_UID
 WORKDIR /app
 COPY --from=publish /app/publish .
 ENTRYPOINT ["dotnet", "Tripkitty.Api.dll"]
