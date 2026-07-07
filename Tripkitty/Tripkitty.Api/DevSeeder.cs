@@ -7,8 +7,9 @@ public static class DevSeeder
 {
     private static readonly (string Handle, string LastName, string FirstName, string Email, string Password)[] TestUsers =
     [
-        ("test1", "User", "Test1", "test1@test.local", "testtest1"),
-        ("test2", "User", "Test2", "test2@test.local", "testtest2"),
+        ("test1", "User", "Test1", "test1@test.local", "testtest"),
+        ("test2", "User", "Test2", "test2@test.local", "testtest"),
+        ("test3", "User", "Test3", "test3@test.local", "testtest"),
     ];
 
     public static async Task SeedAsync(IServiceProvider services)
