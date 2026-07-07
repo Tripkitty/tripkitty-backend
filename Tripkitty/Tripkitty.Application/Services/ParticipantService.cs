@@ -1,4 +1,5 @@
 using Tripkitty.Application.DTOs;
+using Tripkitty.Application.Logic;
 using Tripkitty.Domain.Entities;
 using Tripkitty.Domain.Exceptions;
 
@@ -9,6 +10,8 @@ public interface IParticipantService
     Task<GuestDto> AddMemberAsync(string tripId, string currentUserId, string targetUserId);
     Task<GuestDto> AddGuestAsync(string tripId, string currentUserId, AddGuestRequest request);
     Task RemoveParticipantAsync(string tripId, string currentUserId, string participantId);
+    Task<TripPaymentDto> GetMyPaymentAsync(string tripId, string userId);
+    Task<TripPaymentDto> SetMyPaymentAsync(string tripId, string userId, PaymentDetailsRequest? request);
 }
 
 public interface IFriendshipRepository
@@ -25,7 +28,8 @@ public class ParticipantService(
     IFriendshipRepository friendRepo,
     IUserRepository userRepo,
     IPushNotificationService pushService,
-    ITripNotifier notifier) : IParticipantService
+    ITripNotifier notifier,
+    IPaymentMethodRepository paymentMethodRepo) : IParticipantService
 {
     public async Task<GuestDto> AddMemberAsync(string tripId, string currentUserId, string targetUserId)
     {
@@ -80,7 +84,8 @@ public class ParticipantService(
             LastName = request.LastName.Trim(),
             FirstName = request.FirstName.Trim(),
             MiddleName = string.IsNullOrWhiteSpace(request.MiddleName) ? null : request.MiddleName.Trim(),
-            TripId = tripId
+            TripId = tripId,
+            PaymentDetails = PaymentDetailsFactory.FromRequest(request.PaymentDetails)
         };
 
         trip.Guests.Add(guest);
@@ -89,6 +94,45 @@ public class ParticipantService(
 
         await notifier.TripUpdatedAsync(tripId, TripService.MapToDetail(trip));
         return GuestDto.From(guest);
+    }
+
+    public async Task<TripPaymentDto> GetMyPaymentAsync(string tripId, string userId)
+    {
+        var member = await GetMemberAsync(tripId, userId);
+        return await ResolvePaymentAsync(member);
+    }
+
+    public async Task<TripPaymentDto> SetMyPaymentAsync(string tripId, string userId, PaymentDetailsRequest? request)
+    {
+        var member = await GetMemberAsync(tripId, userId);
+
+        // null → сброс override, реквизиты снова берутся из профиля.
+        member.PaymentDetails = PaymentDetailsFactory.FromRequest(request);
+        await tripRepo.SaveChangesAsync();
+
+        return await ResolvePaymentAsync(member);
+    }
+
+    private async Task<TripMember> GetMemberAsync(string tripId, string userId)
+    {
+        var trip = await tripRepo.GetByIdWithDetailsAsync(tripId)
+                   ?? throw new DomainException("NOT_FOUND", "Trip not found");
+
+        return trip.Members.FirstOrDefault(m => m.UserId == userId)
+               ?? throw new DomainException("FORBIDDEN", "You are not a member of this trip");
+    }
+
+    private async Task<TripPaymentDto> ResolvePaymentAsync(TripMember member)
+    {
+        if (member.PaymentDetails is { } pd)
+            return new TripPaymentDto(PaymentDetailsDto.From(pd), "trip");
+
+        var methods = await paymentMethodRepo.GetForUserAsync(member.UserId);
+        var fallback = methods.FirstOrDefault(m => m.IsDefault) ?? methods.FirstOrDefault();
+
+        return fallback is null
+            ? new TripPaymentDto(null, "none")
+            : new TripPaymentDto(new PaymentDetailsDto(fallback.Phone, fallback.Banks, fallback.Label), "profile");
     }
 
     public async Task RemoveParticipantAsync(string tripId, string currentUserId, string participantId)

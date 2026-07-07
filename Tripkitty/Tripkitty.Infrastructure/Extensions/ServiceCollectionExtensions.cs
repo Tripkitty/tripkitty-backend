@@ -27,6 +27,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITripRepository, TripRepository>();
         services.AddScoped<IFriendshipRepository, FriendshipRepository>();
         services.AddScoped<IPushSubscriptionRepository, PushSubscriptionRepository>();
+        services.AddScoped<IPaymentMethodRepository, PaymentMethodRepository>();
 
         // Infrastructure services
         services.AddScoped<IPasswordHasher, BcryptPasswordHasher>();
@@ -41,6 +42,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IExpenseService, ExpenseService>();
         services.AddScoped<IFriendService, FriendService>();
         services.AddScoped<IEventService, EventService>();
+        services.AddScoped<IPaymentMethodService, PaymentMethodService>();
 
         // WebPush VAPID
         services.Configure<WebPushOptions>(configuration.GetSection("WebPush"));

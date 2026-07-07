@@ -14,6 +14,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Friendship> Friendships => Set<Friendship>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
+    public DbSet<PaymentMethod> PaymentMethods => Set<PaymentMethod>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -26,6 +27,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasOne(m => m.Trip).WithMany(t => t.Members).HasForeignKey(m => m.TripId);
             e.HasOne(m => m.User).WithMany(u => u.TripMemberships).HasForeignKey(m => m.UserId);
             e.HasIndex(m => m.CalendarToken).IsUnique();
+            e.Property(m => m.PaymentDetails).HasColumnType("jsonb");
         });
 
         // Friendship composite PK (UserAId < UserBId always)
@@ -66,6 +68,18 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.SplitType).HasConversion<int>();
         });
 
+        // PaymentMethod → User, Banks as JSONB
+        modelBuilder.Entity<PaymentMethod>(e =>
+        {
+            e.HasKey(p => p.Id);
+            e.HasOne(p => p.User)
+                .WithMany(u => u.PaymentMethods)
+                .HasForeignKey(p => p.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.Property(p => p.Banks).HasColumnType("jsonb");
+            e.HasIndex(p => p.UserId);
+        });
+
         // Trip → Owner
         modelBuilder.Entity<Trip>(e =>
         {
@@ -75,12 +89,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
-        // Guest → Trip
+        // Guest → Trip, PaymentDetails as JSONB
         modelBuilder.Entity<Guest>(e =>
         {
             e.HasOne(g => g.Trip)
                 .WithMany(t => t.Guests)
                 .HasForeignKey(g => g.TripId);
+            e.Property(g => g.PaymentDetails).HasColumnType("jsonb");
         });
 
         // Expense → Trip

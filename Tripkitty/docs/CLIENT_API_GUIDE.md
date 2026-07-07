@@ -149,9 +149,9 @@
 |------|------|
 | `400 Bad Request` | `VALIDATION_ERROR` |
 | `403 Forbidden` | `FORBIDDEN` |
-| `404 Not Found` | `NOT_FOUND` |
+| `404 Not Found` | `NOT_FOUND`, `PAYMENT_METHOD_NOT_FOUND` |
 | `409 Conflict` | `HANDLE_TAKEN`, `EMAIL_TAKEN`, `ALREADY_FRIENDS`, `REQUEST_EXISTS`, `ALREADY_MEMBER` |
-| `422 Unprocessable Entity` | `SELF_REQUEST`, `INVALID_PAYER`, `INVALID_SHARE`, `USER_NOT_FOUND`, `WRONG_PASSWORD`, `INVALID_TOKEN`, `VERSION_CONFLICT` |
+| `422 Unprocessable Entity` | `SELF_REQUEST`, `INVALID_PAYER`, `INVALID_SHARE`, `USER_NOT_FOUND`, `WRONG_PASSWORD`, `INVALID_TOKEN`, `VERSION_CONFLICT`, `INVALID_PHONE`, `INVALID_BANK` |
 | `500 Internal Server Error` | `INTERNAL_ERROR` |
 | `401 Unauthorized` | отсутствует/просрочен access-токен (тело без `error`-обёртки — это ответ middleware аутентификации) |
 
@@ -209,7 +209,7 @@
   "end": "2026-07-10",
   "version": 4,
   "members": [ { "id": "u_...", "name": "Аня Иванова", "lastName": "Иванова", "firstName": "Аня", "middleName": "Петровна", "handle": "anya", "email": "..." } ],
-  "guests":  [ { "id": "g_...", "name": "Петя Сидоров", "lastName": "Сидоров", "firstName": "Петя", "middleName": null } ],
+  "guests":  [ { "id": "g_...", "name": "Петя Сидоров", "lastName": "Сидоров", "firstName": "Петя", "middleName": null, "paymentDetails": { "phone": "+79991234567", "banks": ["TBANK"], "label": null } } ],
   "expenses":[ { "id": "...", "title": "Такси", "amount": 1200.50, "payer": "u_...", "share": [{"participantId":"u_..."},{"participantId":"g_..."}], "splitType": 0, "createdBy": "u_..." } ],
   "events":  [ { "id": "...", "title": "Заезд", "date": "2026-07-01", "time": "14:00", "endTime": null, "createdBy": "u_..." } ]
 }
@@ -269,12 +269,20 @@ If-Match: 4
 `POST /trips/{id}/guests`
 
 ```json
-{ "lastName": "Сидоров", "firstName": "Петя", "middleName": null }
+{
+  "lastName": "Сидоров",
+  "firstName": "Петя",
+  "middleName": null,
+  "paymentDetails": { "phone": "+79991234567", "banks": ["TBANK"], "label": null }
+}
 ```
 
-`lastName` и `firstName` обязательны, `middleName` опционально.
+`lastName` и `firstName` обязательны, `middleName` опционально. `paymentDetails`
+опционально — реквизиты гостя для переводов (см. §11). `phone` нормализуется к
+`+7XXXXXXXXXX` (только RU-номера, иначе `INVALID_PHONE`), `banks` — непустой список
+кодов из `GET /banks` (иначе `INVALID_BANK`).
 
-Ответ `{ "guest": { "id": "g_...", "name": "Петя Сидоров", "lastName": "Сидоров", "firstName": "Петя", "middleName": null } }`.
+Ответ `{ "guest": { "id": "g_...", "name": "Петя Сидоров", ..., "paymentDetails": { ... } } }`.
 
 ### 4.3 Удалить участника (каскад!)
 
@@ -362,6 +370,11 @@ If-Match: 4
 - `ByShares`: все `weight` обязательны и `> 0` (`VALIDATION_ERROR`, field `share`).
 - `ByAmounts`: все `amount` обязательны и `> 0`, сумма должна равняться `amount` (`VALIDATION_ERROR`, field `share`).
 
+> **Реквизиты для перевода** к расходу **не** привязываются. Куда переводить,
+> определяется на этапе взаиморасчётов по реквизитам **получателя** (`toPayment` в
+> `/settlements`, см. §5.3 и §11) — расходы одного человека сворачиваются в один
+> перевод, поэтому реквизиты логически принадлежат участнику, а не расходу.
+
 Ответ `{ "expense": ExpenseDto }`.
 
 `ExpenseDto`:
@@ -396,8 +409,8 @@ If-Match: 4
     "g_kolya": -400.25
   },
   "transactions": [
-    { "from": "u_petya", "to": "u_anya", "amount": 400.25 },
-    { "from": "g_kolya", "to": "u_anya", "amount": 400.25 }
+    { "from": "u_petya", "to": "u_anya", "amount": 400.25, "toPayment": { "phone": "+79991234567", "banks": ["SBERBANK", "TBANK"], "label": "Основной" } },
+    { "from": "g_kolya", "to": "u_anya", "amount": 400.25, "toPayment": { "phone": "+79991234567", "banks": ["SBERBANK", "TBANK"], "label": "Основной" } }
   ]
 }
 ```
@@ -406,6 +419,9 @@ If-Match: 4
   **отрицательный** = должен он.
 - `transactions` — минимальный набор переводов «кто кому сколько», чтобы
   обнулить балансы (жадный алгоритм). `from` платит `to` сумму `amount`.
+- `toPayment` — реквизиты **получателя** (`to`), куда переводить (`{ phone, banks[], label }`).
+  Для юзера — его override для этой поездки, а если не задан — **дефолтный** способ оплаты
+  из профиля (§11). Для гостя — его `paymentDetails`. `null`, если у получателя нет реквизитов.
 
 Клиент должен **не считать долги сам**, а брать готовый ответ этого эндпоинта —
 алгоритм минимизации переводов и округление выполняются на сервере.
@@ -621,14 +637,74 @@ const json = sub.toJSON(); // { endpoint, keys: { p256dh, auth } }
 
 ---
 
-## 11. Чек-лист интеграции
+## 11. Способы оплаты и реквизиты (СБП)
+
+Модель в три уровня:
+
+1. **Способы оплаты в профиле** — глобальный список пользователя (номер + банки).
+2. **Реквизиты юзера в поездке** — опциональный override поверх профиля (напр. «в этой
+   поездке верните на Тинькофф»). Если не задан — берётся дефолтный способ из профиля.
+3. **Реквизиты гостя** — хранятся прямо на госте (у гостя нет профиля), см. §4.2.
+
+Реквизиты нужны получателю на этапе взаиморасчётов: в `/settlements` каждый перевод несёт
+`toPayment` получателя (§5.3). К расходу реквизиты не привязываются.
+
+### 11.1 Справочник банков
+
+`GET /banks` (без авторизации) → `{ "banks": [ { "code": "SBERBANK", "name": "Сбербанк" }, ... ] }`.
+Коды: `SBERBANK`, `TBANK`, `ALFABANK`, `VTB`. Рисуйте выбор банка из этого списка — при
+добавлении новых банков фронт менять не нужно.
+
+### 11.2 Способы оплаты в профиле
+
+- `GET /me/payment-methods` → `{ "paymentMethods": [ PaymentMethodDto ] }`
+- `POST /me/payment-methods` → `{ "paymentMethod": PaymentMethodDto }`
+- `PATCH /me/payment-methods/{id}` → `{ "paymentMethod": PaymentMethodDto }`
+- `DELETE /me/payment-methods/{id}` → `{ "message": "..." }`
+
+`PaymentMethodDto`:
+```json
+{ "id": "pm_...", "phone": "+79991234567", "banks": ["SBERBANK", "TBANK"], "label": "Основной", "isDefault": true }
+```
+
+Тело `POST`:
+```json
+{ "phone": "89991234567", "banks": ["SBERBANK", "TBANK"], "label": "Основной", "isDefault": false }
+```
+`phone` нормализуется к `+7XXXXXXXXXX` (только RU, иначе `INVALID_PHONE`), `banks` — непустой
+список кодов из `GET /banks` (иначе `INVALID_BANK`). `PATCH` — все поля опциональны (передавайте
+только изменяемые). Первый добавленный способ автоматически становится дефолтным. При установке
+`isDefault: true` флаг снимается с остальных; при удалении дефолтного — дефолтным становится любой
+из оставшихся. Чужой/несуществующий `id` → `PAYMENT_METHOD_NOT_FOUND` (404).
+
+### 11.3 Мои реквизиты в поездке (override)
+
+- `GET /trips/{id}/me/payment` → эффективные реквизиты текущего юзера:
+```json
+{ "payment": { "phone": "+79991234567", "banks": ["TBANK"], "label": null }, "source": "trip" }
+```
+`source`: `"trip"` (задан override), `"profile"` (взято из дефолтного способа профиля),
+`"none"` (реквизитов нет). `payment` = `null` при `"none"`.
+
+- `PATCH /trips/{id}/me/payment` — задать/сбросить override для этой поездки:
+```json
+{ "payment": { "phone": "89991234567", "banks": ["TBANK"] } }
+```
+`payment: null` — **сбросить** override (реквизиты снова возьмутся из профиля). Ответ — та же
+структура, что у `GET`. Так реализуется «выбрать из своих способов» (клиент подставляет `phone`/`banks`
+выбранного способа) и «ввести локально».
+
+---
+
+## 12. Чек-лист интеграции
 
 1. [ ] HTTP-клиент с авто-подстановкой `Bearer` и авто-`refresh` на `401`.
 2. [ ] Единая обработка ошибок по `error.code` (а не по тексту).
 3. [ ] `If-Match` при каждом `PATCH /trips/{id}` + обработка `VERSION_CONFLICT`.
 4. [ ] После `participant:removed` / удаления участника — перезапрос деталей поездки.
 5. [ ] Суммы — decimal с 2 знаками; долги берём из `/settlements`, сами не считаем.
-6. [ ] SignalR: `accessTokenFactory` со свежим токеном, `JoinTrip`/`LeaveTrip`,
+6. [ ] Реквизиты для перевода берём из `toPayment` в `/settlements`, не привязываем к расходу.
+7. [ ] SignalR: `accessTokenFactory` со свежим токеном, `JoinTrip`/`LeaveTrip`,
        повторный `JoinTrip` после реконнекта.
-7. [ ] Web Push: SW зарегистрирован, ключ получен, подписка отправлена/снимается.
-8. [ ] Фронтенд-домен добавлен в `Cors:AllowedOrigins` на бэкенде.
+8. [ ] Web Push: SW зарегистрирован, ключ получен, подписка отправлена/снимается.
+9. [ ] Фронтенд-домен добавлен в `Cors:AllowedOrigins` на бэкенде.

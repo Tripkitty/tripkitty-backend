@@ -7,4 +7,5 @@ public class TripMember
     public string CalendarToken { get; set; } = Guid.NewGuid().ToString("N");
     public Trip Trip { get; set; } = null!;
     public User User { get; set; } = null!;
+    public PaymentDetails? PaymentDetails { get; set; } // реквизиты юзера в этой поездке (override), JSONB
 }

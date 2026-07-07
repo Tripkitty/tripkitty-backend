@@ -15,4 +15,5 @@ public class User
     public ICollection<Friendship> FriendshipsInitiated { get; set; } = new List<Friendship>();
     public ICollection<Friendship> FriendshipsReceived { get; set; } = new List<Friendship>();
     public ICollection<TripMember> TripMemberships { get; set; } = new List<TripMember>();
+    public ICollection<PaymentMethod> PaymentMethods { get; set; } = new List<PaymentMethod>();
 }

@@ -111,6 +111,23 @@ public static class TripEndpoints
             return Results.Ok(settlements);
         });
 
+        // Мои реквизиты для перевода в этой поездке (override поездки ?? дефолт профиля)
+        group.MapGet("/{id}/me/payment", async (string id, ClaimsPrincipal user,
+            IParticipantService participantService) =>
+        {
+            var userId = GetUserId(user);
+            var payment = await participantService.GetMyPaymentAsync(id, userId);
+            return Results.Ok(payment);
+        });
+
+        group.MapPatch("/{id}/me/payment", async (string id, SetTripPaymentRequest request, ClaimsPrincipal user,
+            IParticipantService participantService) =>
+        {
+            var userId = GetUserId(user);
+            var payment = await participantService.SetMyPaymentAsync(id, userId, request.Payment);
+            return Results.Ok(payment);
+        });
+
         // Event endpoints
         group.MapPost("/{id}/events", async (string id, AddEventRequest request, ClaimsPrincipal user,
             IEventService eventService) =>
