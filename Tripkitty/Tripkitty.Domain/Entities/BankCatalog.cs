@@ -10,6 +10,7 @@ public static class BankCatalog
         ["TBANK"] = "Т-Банк",
         ["ALFABANK"] = "Альфа-Банк",
         ["VTB"] = "ВТБ",
+        ["YANDEX"] = "Яндекс Банк",
     };
 
     public static bool IsValid(string code) => All.ContainsKey(code);
