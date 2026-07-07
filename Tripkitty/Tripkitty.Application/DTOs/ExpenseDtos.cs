@@ -14,6 +14,6 @@ public record AddExpenseRequest(
     SplitType SplitType = SplitType.Equal
 );
 
-public record SettlementDto(string From, string To, decimal Amount);
+public record SettlementDto(string From, string To, decimal Amount, PaymentDetailsDto? ToPayment = null);
 
 public record SettlementsResponse(Dictionary<string, decimal> Balances, List<SettlementDto> Transactions);

@@ -44,6 +44,15 @@ public static class AuthEndpoints
             return Results.Ok(new { user = me });
         }).RequireAuthorization();
 
+        group.MapPatch("/me", async (UpdateProfileRequest request, ClaimsPrincipal user, IAuthService auth) =>
+        {
+            var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                         ?? user.FindFirst("sub")?.Value
+                         ?? throw new UnauthorizedAccessException();
+            var me = await auth.UpdateProfileAsync(userId, request);
+            return Results.Ok(new { user = me });
+        }).RequireAuthorization();
+
         return app;
     }
 }

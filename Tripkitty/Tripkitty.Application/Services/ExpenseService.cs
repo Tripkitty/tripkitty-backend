@@ -15,7 +15,8 @@ public interface IExpenseService
 public class ExpenseService(
     ITripRepository tripRepo,
     IPushNotificationService pushService,
-    ITripNotifier notifier) : IExpenseService
+    ITripNotifier notifier,
+    IPaymentMethodRepository paymentMethodRepo) : IExpenseService
 {
     public async Task<ExpenseDto> AddAsync(string tripId, string userId, AddExpenseRequest request)
     {
@@ -120,10 +121,42 @@ public class ExpenseService(
 
         var (balances, transactions) = SettlementsCalculator.Compute(trip.Expenses);
 
-        return new SettlementsResponse(
-            balances,
-            transactions.Select(t => new SettlementDto(t.From, t.To, t.Amount)).ToList()
-        );
+        // Реквизиты получателя: гость — его PaymentDetails; юзер — override в поездке,
+        // иначе фолбэк на дефолтный способ оплаты из профиля.
+        var receiverUserIds = transactions
+            .Select(t => t.To)
+            .Where(id => id.StartsWith("u_") &&
+                         trip.Members.FirstOrDefault(m => m.UserId == id)?.PaymentDetails is null)
+            .Distinct()
+            .ToList();
+
+        var fallbackMethods = await paymentMethodRepo.GetForUsersAsync(receiverUserIds);
+        var defaultByUser = fallbackMethods
+            .GroupBy(m => m.UserId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(m => m.IsDefault).First());
+
+        var settlements = transactions.Select(t =>
+        {
+            PaymentDetailsDto? toPayment = null;
+
+            if (t.To.StartsWith("g_"))
+            {
+                var guest = trip.Guests.FirstOrDefault(g => g.Id == t.To);
+                toPayment = PaymentDetailsDto.From(guest?.PaymentDetails);
+            }
+            else
+            {
+                var member = trip.Members.FirstOrDefault(m => m.UserId == t.To);
+                if (member?.PaymentDetails is { } pd)
+                    toPayment = PaymentDetailsDto.From(pd);
+                else if (defaultByUser.TryGetValue(t.To, out var m))
+                    toPayment = new PaymentDetailsDto(m.Phone, m.Banks, m.Label);
+            }
+
+            return new SettlementDto(t.From, t.To, t.Amount, toPayment);
+        }).ToList();
+
+        return new SettlementsResponse(balances, settlements);
     }
 
     private static void ValidateSplitType(AddExpenseRequest request)

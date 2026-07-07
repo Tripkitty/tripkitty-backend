@@ -52,6 +52,7 @@ public class WebPushService(
 
     public async Task NotifyManyAsync(IEnumerable<string> userIds, string title, string body, string? url = null)
     {
-        await Task.WhenAll(userIds.Select(uid => NotifyAsync(uid, title, body, url)));
+        foreach (var uid in userIds)
+            await NotifyAsync(uid, title, body, url);
     }
 }

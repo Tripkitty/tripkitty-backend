@@ -50,6 +50,7 @@ app.MapTripEndpoints();
 app.MapFriendEndpoints();
 app.MapNotificationEndpoints();
 app.MapCalendarEndpoints();
+app.MapPaymentEndpoints();
 app.MapHub<TripHub>("/hubs/trip");
 app.MapHealthChecks("/health");
 

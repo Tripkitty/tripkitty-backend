@@ -79,6 +79,14 @@ public static class TripEndpoints
             return Results.Ok(new { guest });
         });
 
+        group.MapPatch("/{id}/guests/{guestId}", async (string id, string guestId, UpdateGuestRequest request,
+            ClaimsPrincipal user, IParticipantService participantService) =>
+        {
+            var userId = GetUserId(user);
+            var guest = await participantService.UpdateGuestAsync(id, userId, guestId, request);
+            return Results.Ok(new { guest });
+        });
+
         group.MapDelete("/{id}/participants/{participantId}", async (string id, string participantId,
             ClaimsPrincipal user, IParticipantService participantService) =>
         {
@@ -109,6 +117,23 @@ public static class TripEndpoints
             var userId = GetUserId(user);
             var settlements = await expenseService.GetSettlementsAsync(id, userId);
             return Results.Ok(settlements);
+        });
+
+        // Мои реквизиты для перевода в этой поездке (override поездки ?? дефолт профиля)
+        group.MapGet("/{id}/me/payment", async (string id, ClaimsPrincipal user,
+            IParticipantService participantService) =>
+        {
+            var userId = GetUserId(user);
+            var payment = await participantService.GetMyPaymentAsync(id, userId);
+            return Results.Ok(payment);
+        });
+
+        group.MapPatch("/{id}/me/payment", async (string id, SetTripPaymentRequest request, ClaimsPrincipal user,
+            IParticipantService participantService) =>
+        {
+            var userId = GetUserId(user);
+            var payment = await participantService.SetMyPaymentAsync(id, userId, request.Payment);
+            return Results.Ok(payment);
         });
 
         // Event endpoints
