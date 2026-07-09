@@ -24,6 +24,12 @@ public class SignalRTripNotifier(IHubContext<TripHub> hub, ILogger<SignalRTripNo
         return hub.Clients.Group(tripId).SendAsync("expense:added", new { tripId, expense });
     }
 
+    public Task ExpenseUpdatedAsync(string tripId, ExpenseDto expense)
+    {
+        logger.LogInformation("SignalR send expense:updated to group {TripId} expense={ExpenseId}", tripId, expense.Id);
+        return hub.Clients.Group(tripId).SendAsync("expense:updated", new { tripId, expense });
+    }
+
     public Task ExpenseRemovedAsync(string tripId, string expenseId) =>
         hub.Clients.Group(tripId).SendAsync("expense:removed", new { tripId, expenseId });
 
@@ -40,6 +46,12 @@ public class SignalRTripNotifier(IHubContext<TripHub> hub, ILogger<SignalRTripNo
     {
         logger.LogInformation("SignalR send event:added to group {TripId} event={EventId}", tripId, ev.Id);
         return hub.Clients.Group(tripId).SendAsync("event:added", new { tripId, @event = ev });
+    }
+
+    public Task EventUpdatedAsync(string tripId, TripEventDto ev)
+    {
+        logger.LogInformation("SignalR send event:updated to group {TripId} event={EventId}", tripId, ev.Id);
+        return hub.Clients.Group(tripId).SendAsync("event:updated", new { tripId, @event = ev });
     }
 
     public Task EventRemovedAsync(string tripId, string eventId) =>

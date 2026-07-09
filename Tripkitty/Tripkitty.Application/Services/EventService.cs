@@ -7,6 +7,7 @@ namespace Tripkitty.Application.Services;
 public interface IEventService
 {
     Task<TripEventDto> AddAsync(string tripId, string userId, AddEventRequest request);
+    Task<TripEventDto> UpdateAsync(string tripId, string userId, string eventId, AddEventRequest request);
     Task RemoveAsync(string tripId, string userId, string eventId);
 }
 
@@ -24,27 +25,7 @@ public class EventService(
         if (!isMember)
             throw new DomainException("FORBIDDEN", "You are not a member of this trip");
 
-        if (string.IsNullOrWhiteSpace(request.Title))
-            throw new DomainException("VALIDATION_ERROR", "Title is required", "title");
-
-        if (!DateOnly.TryParse(request.Date, out var date))
-            throw new DomainException("VALIDATION_ERROR", "Invalid date format (use yyyy-MM-dd)", "date");
-
-        TimeOnly? time = null;
-        if (!string.IsNullOrWhiteSpace(request.Time))
-        {
-            if (!TimeOnly.TryParse(request.Time, out var t))
-                throw new DomainException("VALIDATION_ERROR", "Invalid time format", "time");
-            time = t;
-        }
-
-        TimeOnly? endTime = null;
-        if (!string.IsNullOrWhiteSpace(request.EndTime))
-        {
-            if (!TimeOnly.TryParse(request.EndTime, out var et))
-                throw new DomainException("VALIDATION_ERROR", "Invalid end time format", "endTime");
-            endTime = et;
-        }
+        var (date, time, endTime) = ValidateAndParse(request);
 
         var ev = new TripEvent
         {
@@ -81,6 +62,40 @@ public class EventService(
         return dto;
     }
 
+    public async Task<TripEventDto> UpdateAsync(string tripId, string userId, string eventId, AddEventRequest request)
+    {
+        var trip = await tripRepo.GetByIdWithDetailsAsync(tripId)
+                   ?? throw new DomainException("NOT_FOUND", "Trip not found");
+
+        var isMember = trip.Members.Any(m => m.UserId == userId);
+        if (!isMember)
+            throw new DomainException("FORBIDDEN", "You are not a member of this trip");
+
+        var ev = trip.Events.FirstOrDefault(e => e.Id == eventId)
+                 ?? throw new DomainException("NOT_FOUND", "Event not found");
+
+        var (date, time, endTime) = ValidateAndParse(request);
+
+        ev.Title = request.Title.Trim();
+        ev.Date = date;
+        ev.Time = time;
+        ev.EndTime = endTime;
+
+        trip.Version++;
+        await tripRepo.SaveChangesAsync();
+
+        var dto = new TripEventDto(
+            ev.Id, ev.Title,
+            ev.Date.ToString("yyyy-MM-dd"),
+            ev.Time?.ToString("HH:mm"),
+            ev.EndTime?.ToString("HH:mm"),
+            ev.CreatedBy
+        );
+
+        await notifier.EventUpdatedAsync(tripId, dto);
+        return dto;
+    }
+
     public async Task RemoveAsync(string tripId, string userId, string eventId)
     {
         var trip = await tripRepo.GetByIdWithDetailsAsync(tripId)
@@ -98,5 +113,32 @@ public class EventService(
         await tripRepo.SaveChangesAsync();
 
         _ = notifier.EventRemovedAsync(tripId, eventId);
+    }
+
+    private static (DateOnly Date, TimeOnly? Time, TimeOnly? EndTime) ValidateAndParse(AddEventRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Title))
+            throw new DomainException("VALIDATION_ERROR", "Title is required", "title");
+
+        if (!DateOnly.TryParse(request.Date, out var date))
+            throw new DomainException("VALIDATION_ERROR", "Invalid date format (use yyyy-MM-dd)", "date");
+
+        TimeOnly? time = null;
+        if (!string.IsNullOrWhiteSpace(request.Time))
+        {
+            if (!TimeOnly.TryParse(request.Time, out var t))
+                throw new DomainException("VALIDATION_ERROR", "Invalid time format", "time");
+            time = t;
+        }
+
+        TimeOnly? endTime = null;
+        if (!string.IsNullOrWhiteSpace(request.EndTime))
+        {
+            if (!TimeOnly.TryParse(request.EndTime, out var et))
+                throw new DomainException("VALIDATION_ERROR", "Invalid end time format", "endTime");
+            endTime = et;
+        }
+
+        return (date, time, endTime);
     }
 }

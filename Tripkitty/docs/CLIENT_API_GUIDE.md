@@ -432,11 +432,21 @@ If-Match: 4
 }
 ```
 
-### 5.2 Удалить расход
+### 5.2 Отредактировать расход
+
+`PATCH /trips/{id}/expenses/{expenseId}`
+
+Тело — как у `POST /trips/{id}/expenses` (§5.1): полная замена расхода, все поля
+обязательны, действуют те же правила валидации. Частичного PATCH (null = не менять)
+здесь нет — форма пересылается целиком.
+
+Ответ `{ "expense": ExpenseDto }`.
+
+### 5.3 Удалить расход
 
 `DELETE /trips/{id}/expenses/{expenseId}` → `{ "message": "Expense removed" }`.
 
-### 5.3 Взаиморасчёты
+### 5.4 Взаиморасчёты
 
 `GET /trips/{id}/settlements`
 
@@ -482,11 +492,20 @@ If-Match: 4
 
 Ответ `{ "event": TripEventDto }`.
 
-### 6.2 Удалить событие
+### 6.2 Отредактировать событие
+
+`PATCH /trips/{id}/events/{eventId}`
+
+Тело — как у `POST /trips/{id}/events` (§6.1): полная замена события, все поля
+пересылаются целиком (как в create), включая `time`/`endTime` (`null` = сбросить).
+
+Ответ `{ "event": TripEventDto }`.
+
+### 6.3 Удалить событие
 
 `DELETE /trips/{id}/events/{eventId}` → `{ "message": "Event removed" }`.
 
-### 6.3 Экспорт календаря (ICS)
+### 6.4 Экспорт календаря (ICS)
 
 `GET /trips/{id}/calendar.ics` — возвращает файл `text/calendar` (заголовок
 `Content-Disposition: attachment`). Доступно только участникам поездки.
@@ -598,10 +617,12 @@ await connection.invoke("LeaveTrip", tripId);
 | `trip:updated` | `TripDetail` (полный объект) | поездка изменена (PATCH, добавление участника/расхода) |
 | `trip:deleted` | `{ tripId }` | поездка удалена |
 | `expense:added` | `ExpenseDto` | добавлен расход |
+| `expense:updated` | `ExpenseDto` | расход отредактирован |
 | `expense:removed` | `{ expenseId }` | удалён расход |
 | `member:added` | `{ id, name }` | добавлен участник |
 | `participant:removed` | `{ participantId }` | удалён участник (помните про каскад — лучше перезапросить детали) |
 | `event:added` | `TripEventDto` | добавлено событие |
+| `event:updated` | `TripEventDto` | событие отредактировано |
 | `event:removed` | `{ eventId }` | удалено событие |
 
 ```js

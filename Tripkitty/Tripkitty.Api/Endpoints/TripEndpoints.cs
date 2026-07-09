@@ -104,6 +104,14 @@ public static class TripEndpoints
             return Results.Ok(new { expense });
         });
 
+        group.MapPatch("/{id}/expenses/{expenseId}", async (string id, string expenseId, AddExpenseRequest request,
+            ClaimsPrincipal user, IExpenseService expenseService) =>
+        {
+            var userId = GetUserId(user);
+            var expense = await expenseService.UpdateAsync(id, userId, expenseId, request);
+            return Results.Ok(new { expense });
+        });
+
         group.MapDelete("/{id}/expenses/{expenseId}", async (string id, string expenseId,
             ClaimsPrincipal user, IExpenseService expenseService) =>
         {
@@ -142,6 +150,14 @@ public static class TripEndpoints
         {
             var userId = GetUserId(user);
             var ev = await eventService.AddAsync(id, userId, request);
+            return Results.Ok(new { @event = ev });
+        });
+
+        group.MapPatch("/{id}/events/{eventId}", async (string id, string eventId, AddEventRequest request,
+            ClaimsPrincipal user, IEventService eventService) =>
+        {
+            var userId = GetUserId(user);
+            var ev = await eventService.UpdateAsync(id, userId, eventId, request);
             return Results.Ok(new { @event = ev });
         });
 

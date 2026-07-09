@@ -8,6 +8,7 @@ namespace Tripkitty.Application.Services;
 public interface IExpenseService
 {
     Task<ExpenseDto> AddAsync(string tripId, string userId, AddExpenseRequest request);
+    Task<ExpenseDto> UpdateAsync(string tripId, string userId, string expenseId, AddExpenseRequest request);
     Task RemoveAsync(string tripId, string userId, string expenseId);
     Task<SettlementsResponse> GetSettlementsAsync(string tripId, string userId);
 }
@@ -27,39 +28,7 @@ public class ExpenseService(
         if (!isMember)
             throw new DomainException("FORBIDDEN", "You are not a member of this trip");
 
-        if (string.IsNullOrWhiteSpace(request.Title))
-            throw new DomainException("VALIDATION_ERROR", "Title is required", "title");
-
-        if (request.Amount <= 0)
-            throw new DomainException("VALIDATION_ERROR", "Amount must be positive", "amount");
-
-        if (string.IsNullOrWhiteSpace(request.Payer))
-            throw new DomainException("VALIDATION_ERROR", "Payer is required", "payer");
-
-        if (request.Share is null || request.Share.Count == 0)
-            throw new DomainException("VALIDATION_ERROR", "Share must have at least one participant", "share");
-
-        ValidateSplitType(request);
-
-        var allParticipantIds = GetAllParticipantIds(trip);
-
-        if (!allParticipantIds.Contains(request.Payer))
-            throw new DomainException("INVALID_PAYER", "Payer is not a participant in this trip", "payer");
-
-        var invalidShare = request.Share.Where(s => !allParticipantIds.Contains(s.ParticipantId)).ToList();
-        if (invalidShare.Count > 0)
-            throw new DomainException("INVALID_SHARE", "Some share participants are not in this trip", "share");
-
-        var shareEntries = request.Share
-            .GroupBy(s => s.ParticipantId)
-            .Select(g => g.First())
-            .Select(s => new ShareEntry
-            {
-                ParticipantId = s.ParticipantId,
-                Weight = s.Weight,
-                AmountMinor = s.Amount.HasValue ? (long)Math.Round(s.Amount.Value * 100) : null
-            })
-            .ToList();
+        var shareEntries = ValidateAndBuildShare(trip, request);
 
         var expense = new Expense
         {
@@ -88,6 +57,34 @@ public class ExpenseService(
 
         var dto = MapToDto(expense, request.Amount);
         await notifier.ExpenseAddedAsync(tripId, dto);
+        return dto;
+    }
+
+    public async Task<ExpenseDto> UpdateAsync(string tripId, string userId, string expenseId, AddExpenseRequest request)
+    {
+        var trip = await tripRepo.GetByIdWithDetailsAsync(tripId)
+                   ?? throw new DomainException("NOT_FOUND", "Trip not found");
+
+        var isMember = trip.Members.Any(m => m.UserId == userId);
+        if (!isMember)
+            throw new DomainException("FORBIDDEN", "You are not a member of this trip");
+
+        var expense = trip.Expenses.FirstOrDefault(e => e.Id == expenseId)
+                      ?? throw new DomainException("NOT_FOUND", "Expense not found");
+
+        var shareEntries = ValidateAndBuildShare(trip, request);
+
+        expense.Title = request.Title.Trim();
+        expense.AmountMinor = (long)Math.Round(request.Amount * 100);
+        expense.Payer = request.Payer;
+        expense.Share = shareEntries;
+        expense.SplitType = request.SplitType;
+
+        trip.Version++;
+        await tripRepo.SaveChangesAsync();
+
+        var dto = MapToDto(expense, request.Amount);
+        await notifier.ExpenseUpdatedAsync(tripId, dto);
         return dto;
     }
 
@@ -157,6 +154,43 @@ public class ExpenseService(
         }).ToList();
 
         return new SettlementsResponse(balances, settlements);
+    }
+
+    private static List<ShareEntry> ValidateAndBuildShare(Trip trip, AddExpenseRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Title))
+            throw new DomainException("VALIDATION_ERROR", "Title is required", "title");
+
+        if (request.Amount <= 0)
+            throw new DomainException("VALIDATION_ERROR", "Amount must be positive", "amount");
+
+        if (string.IsNullOrWhiteSpace(request.Payer))
+            throw new DomainException("VALIDATION_ERROR", "Payer is required", "payer");
+
+        if (request.Share is null || request.Share.Count == 0)
+            throw new DomainException("VALIDATION_ERROR", "Share must have at least one participant", "share");
+
+        ValidateSplitType(request);
+
+        var allParticipantIds = GetAllParticipantIds(trip);
+
+        if (!allParticipantIds.Contains(request.Payer))
+            throw new DomainException("INVALID_PAYER", "Payer is not a participant in this trip", "payer");
+
+        var invalidShare = request.Share.Where(s => !allParticipantIds.Contains(s.ParticipantId)).ToList();
+        if (invalidShare.Count > 0)
+            throw new DomainException("INVALID_SHARE", "Some share participants are not in this trip", "share");
+
+        return request.Share
+            .GroupBy(s => s.ParticipantId)
+            .Select(g => g.First())
+            .Select(s => new ShareEntry
+            {
+                ParticipantId = s.ParticipantId,
+                Weight = s.Weight,
+                AmountMinor = s.Amount.HasValue ? (long)Math.Round(s.Amount.Value * 100) : null
+            })
+            .ToList();
     }
 
     private static void ValidateSplitType(AddExpenseRequest request)
