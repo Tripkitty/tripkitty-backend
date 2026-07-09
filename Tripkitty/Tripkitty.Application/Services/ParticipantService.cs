@@ -44,6 +44,8 @@ public class ParticipantService(
         if (trip.Members.Any(m => m.UserId == targetUserId))
             throw new DomainException("ALREADY_MEMBER", "User is already a member of this trip");
 
+        EnsureActive(trip);
+
         // Must be a friend of current user
         var (a, b) = Normalize(currentUserId, targetUserId);
         var friendship = await friendRepo.FindAsync(a, b);
@@ -72,6 +74,8 @@ public class ParticipantService(
         var isMember = trip.Members.Any(m => m.UserId == currentUserId);
         if (!isMember)
             throw new DomainException("FORBIDDEN", "You are not a member of this trip");
+
+        EnsureActive(trip);
 
         if (string.IsNullOrWhiteSpace(request.LastName))
             throw new DomainException("VALIDATION_ERROR", "Укажите фамилию гостя", "lastName");
@@ -186,39 +190,41 @@ public class ParticipantService(
         if (!isMember)
             throw new DomainException("FORBIDDEN", "You are not a member of this trip");
 
-        // Atomic cascade removal
-        // 1. Remove from members or guests
+        EnsureActive(trip);
+
         var memberToRemove = trip.Members.FirstOrDefault(m => m.UserId == participantId);
         var guestToRemove = trip.Guests.FirstOrDefault(g => g.Id == participantId);
 
         if (memberToRemove is null && guestToRemove is null)
             throw new DomainException("NOT_FOUND", "Participant not found in this trip");
 
+        // Participant must have no expense involvement — payer or in someone's share —
+        // before removal; caller deletes/reassigns those expenses first, no auto-cascade.
+        var blockingExpenseIds = trip.Expenses
+            .Where(e => e.Payer == participantId || e.Share.Any(s => s.ParticipantId == participantId))
+            .Select(e => e.Id)
+            .ToList();
+        if (blockingExpenseIds.Count > 0)
+            throw new DomainException("PARTICIPANT_HAS_EXPENSES",
+                "Нельзя удалить участника, пока на нём есть расходы — сначала удалите или переназначьте их",
+                details: new { expenseIds = blockingExpenseIds });
+
         if (memberToRemove is not null)
             trip.Members.Remove(memberToRemove);
         if (guestToRemove is not null)
             trip.Guests.Remove(guestToRemove);
 
-        // 2. Delete expenses where payer == participantId
-        var expensesToRemove = trip.Expenses.Where(e => e.Payer == participantId).ToList();
-        foreach (var e in expensesToRemove)
-            trip.Expenses.Remove(e);
-
-        // 3. Remove participantId from all share arrays
-        foreach (var expense in trip.Expenses)
-        {
-            expense.Share = expense.Share.Where(s => s.ParticipantId != participantId).ToList();
-        }
-
-        // 4. Delete expenses where share is now empty
-        var emptyShareExpenses = trip.Expenses.Where(e => e.Share.Count == 0).ToList();
-        foreach (var e in emptyShareExpenses)
-            trip.Expenses.Remove(e);
-
         trip.Version++;
         await tripRepo.SaveChangesAsync();
 
         await notifier.TripUpdatedAsync(tripId, TripService.MapToDetail(trip));
+    }
+
+    private static void EnsureActive(Trip trip)
+    {
+        if (trip.Status != TripStatus.Active)
+            throw new DomainException("TRIP_SETTLING",
+                "Подсчёт завершён — изменения заблокированы. Переоткройте подсчёт, чтобы вносить правки");
     }
 
     private static (string, string) Normalize(string a, string b) =>

@@ -8,6 +8,12 @@ public static class WhatsNewCatalog
 {
     public static readonly IReadOnlyList<WhatsNewRelease> Releases = new[]
     {
+        new WhatsNewRelease(4, "Завершение поездки и новый дизайн", new DateOnly(2026, 7, 9), new[]                                                                                                                                           
+        {                                                                                                                                                                                                                                     
+            "Расходы и мероприятия теперь можно редактировать",                                                                                                                                                                               
+            "Поездку можно завершить: расчёт фиксируется, а переводы отмечаются оплаченными",                                                                                                                                                 
+            "Обновлённый дизайн с модальными окнами редактирования"                                                                                                                                                                           
+        }),  
         new WhatsNewRelease(3, "Оплата по СБП", new DateOnly(2026, 7, 7), new[]
         {
             "Реквизиты для перевода теперь можно указать в профиле",

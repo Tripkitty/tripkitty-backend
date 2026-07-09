@@ -17,6 +17,7 @@ public class TripRepository(AppDbContext db) : ITripRepository
             .Include(t => t.Guests)
             .Include(t => t.Expenses)
             .Include(t => t.Events)
+            .Include(t => t.Settlements)
             .FirstOrDefaultAsync(t => t.Id == tripId);
 
     public Task<Trip?> GetByIdAsync(string tripId) =>

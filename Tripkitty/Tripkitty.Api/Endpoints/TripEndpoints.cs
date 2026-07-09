@@ -104,6 +104,14 @@ public static class TripEndpoints
             return Results.Ok(new { expense });
         });
 
+        group.MapPatch("/{id}/expenses/{expenseId}", async (string id, string expenseId, AddExpenseRequest request,
+            ClaimsPrincipal user, IExpenseService expenseService) =>
+        {
+            var userId = GetUserId(user);
+            var expense = await expenseService.UpdateAsync(id, userId, expenseId, request);
+            return Results.Ok(new { expense });
+        });
+
         group.MapDelete("/{id}/expenses/{expenseId}", async (string id, string expenseId,
             ClaimsPrincipal user, IExpenseService expenseService) =>
         {
@@ -112,11 +120,36 @@ public static class TripEndpoints
             return Results.Ok(new { message = "Expense removed" });
         });
 
-        group.MapGet("/{id}/settlements", async (string id, ClaimsPrincipal user, IExpenseService expenseService) =>
+        group.MapGet("/{id}/settlements", async (string id, ClaimsPrincipal user, ISettlementService settlementService) =>
         {
             var userId = GetUserId(user);
-            var settlements = await expenseService.GetSettlementsAsync(id, userId);
+            var settlements = await settlementService.GetAsync(id, userId);
             return Results.Ok(settlements);
+        });
+
+        // Финализация подсчёта: фиксирует транзакции, блокирует расходы и состав участников
+        group.MapPost("/{id}/settlement", async (string id, ClaimsPrincipal user,
+            ISettlementService settlementService) =>
+        {
+            var userId = GetUserId(user);
+            var settlements = await settlementService.FinalizeAsync(id, userId);
+            return Results.Ok(new { settlements });
+        });
+
+        group.MapPost("/{id}/settlement/reopen", async (string id, ClaimsPrincipal user,
+            ISettlementService settlementService) =>
+        {
+            var userId = GetUserId(user);
+            var settlements = await settlementService.ReopenAsync(id, userId);
+            return Results.Ok(new { settlements });
+        });
+
+        group.MapPatch("/{id}/settlement/transactions/{txId}", async (string id, string txId,
+            SetTransactionPaidRequest request, ClaimsPrincipal user, ISettlementService settlementService) =>
+        {
+            var userId = GetUserId(user);
+            var settlements = await settlementService.SetPaidAsync(id, userId, txId, request.Paid);
+            return Results.Ok(new { settlements });
         });
 
         // Мои реквизиты для перевода в этой поездке (override поездки ?? дефолт профиля)
@@ -142,6 +175,14 @@ public static class TripEndpoints
         {
             var userId = GetUserId(user);
             var ev = await eventService.AddAsync(id, userId, request);
+            return Results.Ok(new { @event = ev });
+        });
+
+        group.MapPatch("/{id}/events/{eventId}", async (string id, string eventId, AddEventRequest request,
+            ClaimsPrincipal user, IEventService eventService) =>
+        {
+            var userId = GetUserId(user);
+            var ev = await eventService.UpdateAsync(id, userId, eventId, request);
             return Results.Ok(new { @event = ev });
         });
 

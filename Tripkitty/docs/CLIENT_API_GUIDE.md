@@ -150,7 +150,8 @@
   "error": {
     "code": "HANDLE_TAKEN",
     "message": "Логин @anya уже занят",
-    "field": "handle"
+    "field": "handle",
+    "details": null
   }
 }
 ```
@@ -158,6 +159,7 @@
 - `code` — машиночитаемый код (используйте его в логике, не текст `message`).
 - `message` — человекочитаемый текст (можно показывать пользователю).
 - `field` — имя поля формы, к которому относится ошибка (может быть `null`).
+- `details` — произвольный объект с доп. данными под конкретный код (может быть `null`); формат зависит от `code`, см. описания эндпоинтов.
 
 ### Карта кодов → HTTP-статусов
 
@@ -165,8 +167,8 @@
 |------|------|
 | `400 Bad Request` | `VALIDATION_ERROR` |
 | `403 Forbidden` | `FORBIDDEN` |
-| `404 Not Found` | `NOT_FOUND`, `PAYMENT_METHOD_NOT_FOUND`, `GUEST_NOT_FOUND` |
-| `409 Conflict` | `HANDLE_TAKEN`, `EMAIL_TAKEN`, `ALREADY_FRIENDS`, `REQUEST_EXISTS`, `ALREADY_MEMBER` |
+| `404 Not Found` | `NOT_FOUND`, `PAYMENT_METHOD_NOT_FOUND`, `GUEST_NOT_FOUND`, `TRANSACTION_NOT_FOUND` |
+| `409 Conflict` | `HANDLE_TAKEN`, `EMAIL_TAKEN`, `ALREADY_FRIENDS`, `REQUEST_EXISTS`, `ALREADY_MEMBER`, `PARTICIPANT_HAS_EXPENSES`, `TRIP_SETTLING`, `ALREADY_FINALIZED`, `NOT_FINALIZED`, `TRANSFER_READONLY` |
 | `422 Unprocessable Entity` | `SELF_REQUEST`, `INVALID_PAYER`, `INVALID_SHARE`, `USER_NOT_FOUND`, `WRONG_PASSWORD`, `INVALID_TOKEN`, `VERSION_CONFLICT`, `INVALID_PHONE`, `INVALID_BANK` |
 | `500 Internal Server Error` | `INTERNAL_ERROR` |
 | `401 Unauthorized` | отсутствует/просрочен access-токен (тело без `error`-обёртки — это ответ middleware аутентификации) |
@@ -192,12 +194,14 @@
   "ownerId": "u_...",
   "start": "2026-07-01",
   "end": "2026-07-10",
-  "version": 4
+  "version": 4,
+  "status": "active"
 }
 ```
 
 `start` / `end` — даты в формате `YYYY-MM-DD` (могут быть `null`).
 `version` нужен для оптимистичной блокировки (см. 3.4).
+`status` — стадия подсчёта: `"active"` | `"settling"` | `"settled"` (см. §5.5).
 
 ### 3.2 Создание
 
@@ -224,9 +228,10 @@
   "start": "2026-07-01",
   "end": "2026-07-10",
   "version": 4,
+  "status": "active",
   "members": [ { "id": "u_...", "name": "Аня Иванова", "lastName": "Иванова", "firstName": "Аня", "middleName": "Петровна", "handle": "anya", "email": "..." } ],
   "guests":  [ { "id": "g_...", "name": "Петя Сидоров", "lastName": "Сидоров", "firstName": "Петя", "middleName": null, "paymentDetails": { "phone": "+79991234567", "banks": ["TBANK"], "label": null } } ],
-  "expenses":[ { "id": "...", "title": "Такси", "amount": 1200.50, "payer": "u_...", "share": [{"participantId":"u_..."},{"participantId":"g_..."}], "splitType": 0, "createdBy": "u_..." } ],
+  "expenses":[ { "id": "...", "title": "Такси", "amount": 1200.50, "payer": "u_...", "share": [{"participantId":"u_..."},{"participantId":"g_..."}], "splitType": 0, "createdBy": "u_...", "isTransfer": false } ],
   "events":  [ { "id": "...", "title": "Заезд", "date": "2026-07-01", "time": "14:00", "endTime": null, "createdBy": "u_..." } ]
 }
 ```
@@ -254,7 +259,8 @@ If-Match: 4
 
 ### 3.5 Очистка и удаление
 
-- `POST /trips/{id}/clear` — очищает содержимое поездки (расходы/события), сохраняя её.
+- `POST /trips/{id}/clear` — очищает содержимое поездки (расходы, гостей, зафиксированный
+  подсчёт; статус сбрасывается в `active`), сохраняя её.
 - `DELETE /trips/{id}` — удаляет поездку целиком.
 
 Оба возвращают `{ "message": "..." }`.
@@ -323,20 +329,33 @@ If-Match: 4
 Ответ `{ "guest": GuestDto }`. Мутация шлёт `trip:updated` по SignalR и повышает
 `version` поездки. Ошибка `GUEST_NOT_FOUND` (404), если гостя нет в поездке.
 
-### 4.3 Удалить участника (каскад!)
+### 4.3 Удалить участника
 
 `DELETE /trips/{id}/participants/{participantId}`
 
-Удаление участника **атомарно** влечёт за собой:
+Удаление **блокируется**, если участник фигурирует хоть в одном расходе — как
+плательщик (`payer`) или в чьём-либо `share`. В этом случае ответ — `409 Conflict`,
+код `PARTICIPANT_HAS_EXPENSES`, а `error.details` содержит список блокирующих
+расходов:
 
-1. Удаление участника из `members` / `guests`.
-2. Удаление всех расходов, где этот участник — плательщик (`payer`).
-3. Удаление участника из всех массивов `share`.
-4. Удаление расходов, у которых `share` стал пустым.
+```json
+{
+  "error": {
+    "code": "PARTICIPANT_HAS_EXPENSES",
+    "message": "Нельзя удалить участника, пока на нём есть расходы — сначала удалите или переназначьте их",
+    "field": null,
+    "details": { "expenseIds": ["exp_1", "exp_2"] }
+  }
+}
+```
 
-Поэтому после удаления участника клиент **обязан перезапросить детали поездки**
-(`GET /trips/{id}`) — локально пересчитать состояние нельзя, изменения затрагивают
-расходы. То же касается списка взаиморасчётов.
+Автоматического каскадного удаления расходов нет. Клиент должен сначала сам
+удалить или переназначить расходы из `details.expenseIds`
+(`DELETE /trips/{id}/expenses/{expenseId}` либо PATCH с новым `payer`/`share`),
+и только потом повторить удаление участника. `expenseIds` можно использовать
+и для превентивной проверки на клиенте (подсветить блокирующие расходы),
+но он всегда актуален на момент ответа сервера — не полагайтесь на локальный
+кэш `TripDetail`, если между действиями прошло время.
 
 ---
 
@@ -428,42 +447,101 @@ If-Match: 4
     { "participantId": "u_...", "weight": null, "amount": null },
     { "participantId": "g_...", "weight": null, "amount": null }
   ],
-  "createdBy": "u_..."
+  "createdBy": "u_...",
+  "isTransfer": false
 }
 ```
 
-### 5.2 Удалить расход
+`isTransfer: true` — служебный расход-перевод, созданный при переоткрытии подсчёта
+(§5.5); редактировать/удалять его нельзя (`409 TRANSFER_READONLY`).
+
+### 5.2 Отредактировать расход
+
+`PATCH /trips/{id}/expenses/{expenseId}`
+
+Тело — как у `POST /trips/{id}/expenses` (§5.1): полная замена расхода, все поля
+обязательны, действуют те же правила валидации. Частичного PATCH (null = не менять)
+здесь нет — форма пересылается целиком.
+
+Ответ `{ "expense": ExpenseDto }`.
+
+### 5.3 Удалить расход
 
 `DELETE /trips/{id}/expenses/{expenseId}` → `{ "message": "Expense removed" }`.
 
-### 5.3 Взаиморасчёты
+### 5.4 Взаиморасчёты
 
 `GET /trips/{id}/settlements`
 
 ```json
 {
+  "status": "active",
   "balances": {
     "u_anya": 800.50,
     "u_petya": -400.25,
     "g_kolya": -400.25
   },
   "transactions": [
-    { "from": "u_petya", "to": "u_anya", "amount": 400.25, "toPayment": { "phone": "+79991234567", "banks": ["SBERBANK", "TBANK"], "label": "Основной" } },
-    { "from": "g_kolya", "to": "u_anya", "amount": 400.25, "toPayment": { "phone": "+79991234567", "banks": ["SBERBANK", "TBANK"], "label": "Основной" } }
+    { "from": "u_petya", "to": "u_anya", "amount": 400.25, "toPayment": { "phone": "+79991234567", "banks": ["SBERBANK", "TBANK"], "label": "Основной" }, "id": null, "isPaid": null, "paidAt": null },
+    { "from": "g_kolya", "to": "u_anya", "amount": 400.25, "toPayment": { "phone": "+79991234567", "banks": ["SBERBANK", "TBANK"], "label": "Основной" }, "id": null, "isPaid": null, "paidAt": null }
   ]
 }
 ```
 
+- `status` — стадия подсчёта поездки, та же что в trip-DTO (см. §5.5).
 - `balances` — итоговый баланс каждого участника: **положительный** = ему должны,
   **отрицательный** = должен он.
 - `transactions` — минимальный набор переводов «кто кому сколько», чтобы
   обнулить балансы (жадный алгоритм). `from` платит `to` сумму `amount`.
+  Пока `status: "active"` это **предварительный** расчёт: он пересчитывается при
+  каждом изменении расходов и состав переводов может полностью меняться —
+  `id`/`isPaid`/`paidAt` всегда `null`. После финализации (§5.5) транзакции
+  зафиксированы: у каждой есть постоянный `id`, флаг `isPaid` и время `paidAt`.
 - `toPayment` — реквизиты **получателя** (`to`), куда переводить (`{ phone, banks[], label }`).
   Для юзера — его override для этой поездки, а если не задан — **дефолтный** способ оплаты
   из профиля (§11). Для гостя — его `paymentDetails`. `null`, если у получателя нет реквизитов.
+  Резолвится живьём даже после финализации — если получатель добавит СБП позже,
+  реквизиты появятся.
 
 Клиент должен **не считать долги сам**, а брать готовый ответ этого эндпоинта —
 алгоритм минимизации переводов и округление выполняются на сервере.
+
+### 5.5 Финализация подсчёта и отметки об оплате
+
+Жизненный цикл поездки: `active` → `settling` → `settled`.
+
+- **`active`** — все накидывают расходы, `/settlements` показывает живой предварительный расчёт.
+- **`settling`** — владелец завершил подсчёт: список переводов зафиксирован, участники
+  переводят деньги и отмечают оплату. Мутации денег заблокированы (`409 TRIP_SETTLING`):
+  добавление/редактирование/удаление расходов, добавление/удаление участников и гостей.
+  События календаря, `PATCH /trips/{id}` и редактирование профиля гостя — разрешены.
+- **`settled`** — все переводы отмечены оплаченными (проставляется автоматически;
+  снятие отметки возвращает `settling`).
+
+Все три эндпоинта возвращают полный `{ "settlements": SettlementsResponse }` (формат §5.4).
+
+**`POST /trips/{id}/settlement`** — завершить подсчёт (только владелец, иначе `403`).
+Фиксирует транзакции и переводит поездку в `settling` (или сразу в `settled`, если
+переводить нечего). Повторный вызов — `409 ALREADY_FINALIZED`.
+
+**`PATCH /trips/{id}/settlement/transactions/{txId}`** — отметить оплату:
+
+```json
+{ "paid": true }
+```
+
+Отметить (или снять отметку `"paid": false`) может любой из двух концов перевода;
+если конец — гость, то любой участник поездки. Чужой перевод — `403`.
+До финализации — `409 NOT_FINALIZED`, неизвестный `txId` — `404 TRANSACTION_NOT_FOUND`.
+
+**`POST /trips/{id}/settlement/reopen`** — переоткрыть подсчёт (только владелец).
+Возвращает поездку в `active`: неоплаченные транзакции удаляются, а **оплаченные
+конвертируются в расходы-переводы** (`"isTransfer": true`, `title: "Перевод"`), чтобы уже
+переведённые деньги остались учтёнными в новом пересчёте. Сценарий: забыли расход после
+финализации → reopen → добавить расход → финализировать заново.
+
+Расходы-переводы нельзя редактировать и удалять (`409 TRANSFER_READONLY`) — в UI
+показывайте их отдельным стилем без кнопок правки.
 
 ---
 
@@ -482,11 +560,20 @@ If-Match: 4
 
 Ответ `{ "event": TripEventDto }`.
 
-### 6.2 Удалить событие
+### 6.2 Отредактировать событие
+
+`PATCH /trips/{id}/events/{eventId}`
+
+Тело — как у `POST /trips/{id}/events` (§6.1): полная замена события, все поля
+пересылаются целиком (как в create), включая `time`/`endTime` (`null` = сбросить).
+
+Ответ `{ "event": TripEventDto }`.
+
+### 6.3 Удалить событие
 
 `DELETE /trips/{id}/events/{eventId}` → `{ "message": "Event removed" }`.
 
-### 6.3 Экспорт календаря (ICS)
+### 6.4 Экспорт календаря (ICS)
 
 `GET /trips/{id}/calendar.ics` — возвращает файл `text/calendar` (заголовок
 `Content-Disposition: attachment`). Доступно только участникам поездки.
@@ -598,16 +685,19 @@ await connection.invoke("LeaveTrip", tripId);
 | `trip:updated` | `TripDetail` (полный объект) | поездка изменена (PATCH, добавление участника/расхода) |
 | `trip:deleted` | `{ tripId }` | поездка удалена |
 | `expense:added` | `ExpenseDto` | добавлен расход |
+| `expense:updated` | `ExpenseDto` | расход отредактирован |
 | `expense:removed` | `{ expenseId }` | удалён расход |
 | `member:added` | `{ id, name }` | добавлен участник |
-| `participant:removed` | `{ participantId }` | удалён участник (помните про каскад — лучше перезапросить детали) |
+| `participant:removed` | `{ participantId }` | удалён участник |
 | `event:added` | `TripEventDto` | добавлено событие |
+| `event:updated` | `TripEventDto` | событие отредактировано |
 | `event:removed` | `{ eventId }` | удалено событие |
+| `settlement:updated` | `{ tripId, settlements }` (полный `SettlementsResponse`, §5.4) | финализация / reopen / отметка об оплате |
 
 ```js
 connection.on("expense:added", (expense) => { /* обновить UI */ });
 connection.on("participant:removed", ({ participantId }) => {
-  // каскадно могли пропасть расходы — перезапросите GET /trips/{id}
+  // обновить локальный список участников
 });
 ```
 
@@ -784,7 +874,7 @@ const json = sub.toJSON(); // { endpoint, keys: { p256dh, auth } }
 1. [ ] HTTP-клиент с авто-подстановкой `Bearer` и авто-`refresh` на `401`.
 2. [ ] Единая обработка ошибок по `error.code` (а не по тексту).
 3. [ ] `If-Match` при каждом `PATCH /trips/{id}` + обработка `VERSION_CONFLICT`.
-4. [ ] После `participant:removed` / удаления участника — перезапрос деталей поездки.
+4. [ ] Обработка `PARTICIPANT_HAS_EXPENSES` (409) при удалении участника — предложить сначала удалить/переназначить его расходы.
 5. [ ] Суммы — decimal с 2 знаками; долги берём из `/settlements`, сами не считаем.
 6. [ ] Реквизиты для перевода берём из `toPayment` в `/settlements`, не привязываем к расходу.
 7. [ ] SignalR: `accessTokenFactory` со свежим токеном, `JoinTrip`/`LeaveTrip`,

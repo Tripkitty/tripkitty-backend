@@ -15,6 +15,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
     public DbSet<PaymentMethod> PaymentMethods => Set<PaymentMethod>();
+    public DbSet<SettlementTransaction> SettlementTransactions => Set<SettlementTransaction>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -112,6 +113,16 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasOne(ev => ev.Trip)
                 .WithMany(t => t.Events)
                 .HasForeignKey(ev => ev.TripId);
+        });
+
+        // SettlementTransaction → Trip
+        modelBuilder.Entity<SettlementTransaction>(e =>
+        {
+            e.HasOne(s => s.Trip)
+                .WithMany(t => t.Settlements)
+                .HasForeignKey(s => s.TripId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(s => s.TripId);
         });
 
         // RefreshToken → User

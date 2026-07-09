@@ -14,6 +14,17 @@ public record AddExpenseRequest(
     SplitType SplitType = SplitType.Equal
 );
 
-public record SettlementDto(string From, string To, decimal Amount, PaymentDetailsDto? ToPayment = null);
+// Id/IsPaid/PaidAt заполнены только для зафиксированных транзакций (status != active)
+public record SettlementDto(
+    string From,
+    string To,
+    decimal Amount,
+    PaymentDetailsDto? ToPayment = null,
+    string? Id = null,
+    bool? IsPaid = null,
+    DateTime? PaidAt = null
+);
 
-public record SettlementsResponse(Dictionary<string, decimal> Balances, List<SettlementDto> Transactions);
+public record SettlementsResponse(string Status, Dictionary<string, decimal> Balances, List<SettlementDto> Transactions);
+
+public record SetTransactionPaidRequest(bool Paid);
