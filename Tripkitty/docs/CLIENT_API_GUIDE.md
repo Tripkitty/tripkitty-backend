@@ -150,7 +150,8 @@
   "error": {
     "code": "HANDLE_TAKEN",
     "message": "Логин @anya уже занят",
-    "field": "handle"
+    "field": "handle",
+    "details": null
   }
 }
 ```
@@ -158,6 +159,7 @@
 - `code` — машиночитаемый код (используйте его в логике, не текст `message`).
 - `message` — человекочитаемый текст (можно показывать пользователю).
 - `field` — имя поля формы, к которому относится ошибка (может быть `null`).
+- `details` — произвольный объект с доп. данными под конкретный код (может быть `null`); формат зависит от `code`, см. описания эндпоинтов.
 
 ### Карта кодов → HTTP-статусов
 
@@ -166,7 +168,7 @@
 | `400 Bad Request` | `VALIDATION_ERROR` |
 | `403 Forbidden` | `FORBIDDEN` |
 | `404 Not Found` | `NOT_FOUND`, `PAYMENT_METHOD_NOT_FOUND`, `GUEST_NOT_FOUND` |
-| `409 Conflict` | `HANDLE_TAKEN`, `EMAIL_TAKEN`, `ALREADY_FRIENDS`, `REQUEST_EXISTS`, `ALREADY_MEMBER` |
+| `409 Conflict` | `HANDLE_TAKEN`, `EMAIL_TAKEN`, `ALREADY_FRIENDS`, `REQUEST_EXISTS`, `ALREADY_MEMBER`, `PARTICIPANT_HAS_EXPENSES` |
 | `422 Unprocessable Entity` | `SELF_REQUEST`, `INVALID_PAYER`, `INVALID_SHARE`, `USER_NOT_FOUND`, `WRONG_PASSWORD`, `INVALID_TOKEN`, `VERSION_CONFLICT`, `INVALID_PHONE`, `INVALID_BANK` |
 | `500 Internal Server Error` | `INTERNAL_ERROR` |
 | `401 Unauthorized` | отсутствует/просрочен access-токен (тело без `error`-обёртки — это ответ middleware аутентификации) |
@@ -323,20 +325,33 @@ If-Match: 4
 Ответ `{ "guest": GuestDto }`. Мутация шлёт `trip:updated` по SignalR и повышает
 `version` поездки. Ошибка `GUEST_NOT_FOUND` (404), если гостя нет в поездке.
 
-### 4.3 Удалить участника (каскад!)
+### 4.3 Удалить участника
 
 `DELETE /trips/{id}/participants/{participantId}`
 
-Удаление участника **атомарно** влечёт за собой:
+Удаление **блокируется**, если участник фигурирует хоть в одном расходе — как
+плательщик (`payer`) или в чьём-либо `share`. В этом случае ответ — `409 Conflict`,
+код `PARTICIPANT_HAS_EXPENSES`, а `error.details` содержит список блокирующих
+расходов:
 
-1. Удаление участника из `members` / `guests`.
-2. Удаление всех расходов, где этот участник — плательщик (`payer`).
-3. Удаление участника из всех массивов `share`.
-4. Удаление расходов, у которых `share` стал пустым.
+```json
+{
+  "error": {
+    "code": "PARTICIPANT_HAS_EXPENSES",
+    "message": "Нельзя удалить участника, пока на нём есть расходы — сначала удалите или переназначьте их",
+    "field": null,
+    "details": { "expenseIds": ["exp_1", "exp_2"] }
+  }
+}
+```
 
-Поэтому после удаления участника клиент **обязан перезапросить детали поездки**
-(`GET /trips/{id}`) — локально пересчитать состояние нельзя, изменения затрагивают
-расходы. То же касается списка взаиморасчётов.
+Автоматического каскадного удаления расходов нет. Клиент должен сначала сам
+удалить или переназначить расходы из `details.expenseIds`
+(`DELETE /trips/{id}/expenses/{expenseId}` либо PATCH с новым `payer`/`share`),
+и только потом повторить удаление участника. `expenseIds` можно использовать
+и для превентивной проверки на клиенте (подсветить блокирующие расходы),
+но он всегда актуален на момент ответа сервера — не полагайтесь на локальный
+кэш `TripDetail`, если между действиями прошло время.
 
 ---
 
@@ -620,7 +635,7 @@ await connection.invoke("LeaveTrip", tripId);
 | `expense:updated` | `ExpenseDto` | расход отредактирован |
 | `expense:removed` | `{ expenseId }` | удалён расход |
 | `member:added` | `{ id, name }` | добавлен участник |
-| `participant:removed` | `{ participantId }` | удалён участник (помните про каскад — лучше перезапросить детали) |
+| `participant:removed` | `{ participantId }` | удалён участник |
 | `event:added` | `TripEventDto` | добавлено событие |
 | `event:updated` | `TripEventDto` | событие отредактировано |
 | `event:removed` | `{ eventId }` | удалено событие |
@@ -628,7 +643,7 @@ await connection.invoke("LeaveTrip", tripId);
 ```js
 connection.on("expense:added", (expense) => { /* обновить UI */ });
 connection.on("participant:removed", ({ participantId }) => {
-  // каскадно могли пропасть расходы — перезапросите GET /trips/{id}
+  // обновить локальный список участников
 });
 ```
 
@@ -805,7 +820,7 @@ const json = sub.toJSON(); // { endpoint, keys: { p256dh, auth } }
 1. [ ] HTTP-клиент с авто-подстановкой `Bearer` и авто-`refresh` на `401`.
 2. [ ] Единая обработка ошибок по `error.code` (а не по тексту).
 3. [ ] `If-Match` при каждом `PATCH /trips/{id}` + обработка `VERSION_CONFLICT`.
-4. [ ] После `participant:removed` / удаления участника — перезапрос деталей поездки.
+4. [ ] Обработка `PARTICIPANT_HAS_EXPENSES` (409) при удалении участника — предложить сначала удалить/переназначить его расходы.
 5. [ ] Суммы — decimal с 2 знаками; долги берём из `/settlements`, сами не считаем.
 6. [ ] Реквизиты для перевода берём из `toPayment` в `/settlements`, не привязываем к расходу.
 7. [ ] SignalR: `accessTokenFactory` со свежим токеном, `JoinTrip`/`LeaveTrip`,
