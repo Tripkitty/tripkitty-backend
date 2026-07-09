@@ -7,7 +7,7 @@ namespace Tripkitty.Application.Services;
 public interface IExpenseService
 {
     Task<ExpenseDto> AddAsync(string tripId, string userId, AddExpenseRequest request);
-    Task<ExpenseDto> UpdateAsync(string tripId, string userId, string expenseId, AddExpenseRequest request);
+    Task<(ExpenseDto Expense, bool TripHasPaidTransfers)> UpdateAsync(string tripId, string userId, string expenseId, AddExpenseRequest request);
     Task RemoveAsync(string tripId, string userId, string expenseId);
 }
 
@@ -59,7 +59,7 @@ public class ExpenseService(
         return dto;
     }
 
-    public async Task<ExpenseDto> UpdateAsync(string tripId, string userId, string expenseId, AddExpenseRequest request)
+    public async Task<(ExpenseDto Expense, bool TripHasPaidTransfers)> UpdateAsync(string tripId, string userId, string expenseId, AddExpenseRequest request)
     {
         var trip = await tripRepo.GetByIdWithDetailsAsync(tripId)
                    ?? throw new DomainException("NOT_FOUND", "Trip not found");
@@ -89,7 +89,9 @@ public class ExpenseService(
 
         var dto = MapToDto(expense, request.Amount);
         await notifier.ExpenseUpdatedAsync(tripId, dto);
-        return dto;
+
+        var tripHasPaidTransfers = trip.Expenses.Any(e => e.IsTransfer);
+        return (dto, tripHasPaidTransfers);
     }
 
     public async Task RemoveAsync(string tripId, string userId, string expenseId)

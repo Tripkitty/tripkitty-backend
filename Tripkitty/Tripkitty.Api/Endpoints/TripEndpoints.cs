@@ -108,8 +108,12 @@ public static class TripEndpoints
             ClaimsPrincipal user, IExpenseService expenseService) =>
         {
             var userId = GetUserId(user);
-            var expense = await expenseService.UpdateAsync(id, userId, expenseId, request);
-            return Results.Ok(new { expense });
+            var (expense, tripHasPaidTransfers) = await expenseService.UpdateAsync(id, userId, expenseId, request);
+            return Results.Ok(new
+            {
+                expense,
+                warning = tripHasPaidTransfers ? "TRIP_HAS_PAID_TRANSFERS" : null
+            });
         });
 
         group.MapDelete("/{id}/expenses/{expenseId}", async (string id, string expenseId,
