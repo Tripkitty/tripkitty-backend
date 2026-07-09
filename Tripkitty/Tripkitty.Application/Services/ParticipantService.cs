@@ -44,6 +44,8 @@ public class ParticipantService(
         if (trip.Members.Any(m => m.UserId == targetUserId))
             throw new DomainException("ALREADY_MEMBER", "User is already a member of this trip");
 
+        EnsureActive(trip);
+
         // Must be a friend of current user
         var (a, b) = Normalize(currentUserId, targetUserId);
         var friendship = await friendRepo.FindAsync(a, b);
@@ -72,6 +74,8 @@ public class ParticipantService(
         var isMember = trip.Members.Any(m => m.UserId == currentUserId);
         if (!isMember)
             throw new DomainException("FORBIDDEN", "You are not a member of this trip");
+
+        EnsureActive(trip);
 
         if (string.IsNullOrWhiteSpace(request.LastName))
             throw new DomainException("VALIDATION_ERROR", "Укажите фамилию гостя", "lastName");
@@ -186,6 +190,8 @@ public class ParticipantService(
         if (!isMember)
             throw new DomainException("FORBIDDEN", "You are not a member of this trip");
 
+        EnsureActive(trip);
+
         var memberToRemove = trip.Members.FirstOrDefault(m => m.UserId == participantId);
         var guestToRemove = trip.Guests.FirstOrDefault(g => g.Id == participantId);
 
@@ -212,6 +218,13 @@ public class ParticipantService(
         await tripRepo.SaveChangesAsync();
 
         await notifier.TripUpdatedAsync(tripId, TripService.MapToDetail(trip));
+    }
+
+    private static void EnsureActive(Trip trip)
+    {
+        if (trip.Status != TripStatus.Active)
+            throw new DomainException("TRIP_SETTLING",
+                "Подсчёт завершён — изменения заблокированы. Переоткройте подсчёт, чтобы вносить правки");
     }
 
     private static (string, string) Normalize(string a, string b) =>

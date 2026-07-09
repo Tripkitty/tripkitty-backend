@@ -11,4 +11,6 @@ public class Expense
     public List<ShareEntry> Share { get; set; } = new();
     public SplitType SplitType { get; set; } = SplitType.Equal;
     public string CreatedBy { get; set; } = ""; // userId
+    public bool IsTransfer { get; set; } // перевод, созданный при reopen из оплаченной транзакции; read-only
+
 }

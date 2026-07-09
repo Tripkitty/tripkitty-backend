@@ -8,12 +8,13 @@ public class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionMiddlewa
 {
     private static readonly HashSet<string> ConflictCodes = new()
     {
-        "HANDLE_TAKEN", "EMAIL_TAKEN", "ALREADY_FRIENDS", "REQUEST_EXISTS", "ALREADY_MEMBER", "PARTICIPANT_HAS_EXPENSES"
+        "HANDLE_TAKEN", "EMAIL_TAKEN", "ALREADY_FRIENDS", "REQUEST_EXISTS", "ALREADY_MEMBER", "PARTICIPANT_HAS_EXPENSES",
+        "TRIP_SETTLING", "ALREADY_FINALIZED", "NOT_FINALIZED", "TRANSFER_READONLY"
     };
 
     private static readonly HashSet<string> NotFoundCodes = new()
     {
-        "NOT_FOUND", "PAYMENT_METHOD_NOT_FOUND", "GUEST_NOT_FOUND"
+        "NOT_FOUND", "PAYMENT_METHOD_NOT_FOUND", "GUEST_NOT_FOUND", "TRANSACTION_NOT_FOUND"
     };
 
     private static readonly HashSet<string> ForbiddenCodes = new()

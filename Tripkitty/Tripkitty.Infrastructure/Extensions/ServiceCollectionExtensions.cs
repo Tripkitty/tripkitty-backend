@@ -40,6 +40,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITripService, TripService>();
         services.AddScoped<IParticipantService, ParticipantService>();
         services.AddScoped<IExpenseService, ExpenseService>();
+        services.AddScoped<ISettlementService, SettlementService>();
         services.AddScoped<IFriendService, FriendService>();
         services.AddScoped<IEventService, EventService>();
         services.AddScoped<IPaymentMethodService, PaymentMethodService>();

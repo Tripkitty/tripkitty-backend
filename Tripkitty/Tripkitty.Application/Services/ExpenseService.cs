@@ -1,5 +1,4 @@
 using Tripkitty.Application.DTOs;
-using Tripkitty.Application.Logic;
 using Tripkitty.Domain.Entities;
 using Tripkitty.Domain.Exceptions;
 
@@ -10,14 +9,12 @@ public interface IExpenseService
     Task<ExpenseDto> AddAsync(string tripId, string userId, AddExpenseRequest request);
     Task<ExpenseDto> UpdateAsync(string tripId, string userId, string expenseId, AddExpenseRequest request);
     Task RemoveAsync(string tripId, string userId, string expenseId);
-    Task<SettlementsResponse> GetSettlementsAsync(string tripId, string userId);
 }
 
 public class ExpenseService(
     ITripRepository tripRepo,
     IPushNotificationService pushService,
-    ITripNotifier notifier,
-    IPaymentMethodRepository paymentMethodRepo) : IExpenseService
+    ITripNotifier notifier) : IExpenseService
 {
     public async Task<ExpenseDto> AddAsync(string tripId, string userId, AddExpenseRequest request)
     {
@@ -27,6 +24,8 @@ public class ExpenseService(
         var isMember = trip.Members.Any(m => m.UserId == userId);
         if (!isMember)
             throw new DomainException("FORBIDDEN", "You are not a member of this trip");
+
+        EnsureActive(trip);
 
         var shareEntries = ValidateAndBuildShare(trip, request);
 
@@ -69,8 +68,13 @@ public class ExpenseService(
         if (!isMember)
             throw new DomainException("FORBIDDEN", "You are not a member of this trip");
 
+        EnsureActive(trip);
+
         var expense = trip.Expenses.FirstOrDefault(e => e.Id == expenseId)
                       ?? throw new DomainException("NOT_FOUND", "Expense not found");
+
+        if (expense.IsTransfer)
+            throw new DomainException("TRANSFER_READONLY", "Перевод нельзя редактировать или удалять");
 
         var shareEntries = ValidateAndBuildShare(trip, request);
 
@@ -97,8 +101,13 @@ public class ExpenseService(
         if (!isMember)
             throw new DomainException("FORBIDDEN", "You are not a member of this trip");
 
+        EnsureActive(trip);
+
         var expense = trip.Expenses.FirstOrDefault(e => e.Id == expenseId)
                       ?? throw new DomainException("NOT_FOUND", "Expense not found");
+
+        if (expense.IsTransfer)
+            throw new DomainException("TRANSFER_READONLY", "Перевод нельзя редактировать или удалять");
 
         trip.Expenses.Remove(expense);
         trip.Version++;
@@ -107,53 +116,11 @@ public class ExpenseService(
         _ = notifier.ExpenseRemovedAsync(tripId, expenseId);
     }
 
-    public async Task<SettlementsResponse> GetSettlementsAsync(string tripId, string userId)
+    private static void EnsureActive(Trip trip)
     {
-        var trip = await tripRepo.GetByIdWithDetailsAsync(tripId)
-                   ?? throw new DomainException("NOT_FOUND", "Trip not found");
-
-        var isMember = trip.Members.Any(m => m.UserId == userId);
-        if (!isMember)
-            throw new DomainException("FORBIDDEN", "You are not a member of this trip");
-
-        var (balances, transactions) = SettlementsCalculator.Compute(trip.Expenses);
-
-        // Реквизиты получателя: гость — его PaymentDetails; юзер — override в поездке,
-        // иначе фолбэк на дефолтный способ оплаты из профиля.
-        var receiverUserIds = transactions
-            .Select(t => t.To)
-            .Where(id => id.StartsWith("u_") &&
-                         trip.Members.FirstOrDefault(m => m.UserId == id)?.PaymentDetails is null)
-            .Distinct()
-            .ToList();
-
-        var fallbackMethods = await paymentMethodRepo.GetForUsersAsync(receiverUserIds);
-        var defaultByUser = fallbackMethods
-            .GroupBy(m => m.UserId)
-            .ToDictionary(g => g.Key, g => g.OrderByDescending(m => m.IsDefault).First());
-
-        var settlements = transactions.Select(t =>
-        {
-            PaymentDetailsDto? toPayment = null;
-
-            if (t.To.StartsWith("g_"))
-            {
-                var guest = trip.Guests.FirstOrDefault(g => g.Id == t.To);
-                toPayment = PaymentDetailsDto.From(guest?.PaymentDetails);
-            }
-            else
-            {
-                var member = trip.Members.FirstOrDefault(m => m.UserId == t.To);
-                if (member?.PaymentDetails is { } pd)
-                    toPayment = PaymentDetailsDto.From(pd);
-                else if (defaultByUser.TryGetValue(t.To, out var m))
-                    toPayment = new PaymentDetailsDto(m.Phone, m.Banks, m.Label);
-            }
-
-            return new SettlementDto(t.From, t.To, t.Amount, toPayment);
-        }).ToList();
-
-        return new SettlementsResponse(balances, settlements);
+        if (trip.Status != TripStatus.Active)
+            throw new DomainException("TRIP_SETTLING",
+                "Подсчёт завершён — изменения заблокированы. Переоткройте подсчёт, чтобы вносить правки");
     }
 
     private static List<ShareEntry> ValidateAndBuildShare(Trip trip, AddExpenseRequest request)
@@ -228,7 +195,8 @@ public class ExpenseService(
                 s.AmountMinor.HasValue ? s.AmountMinor.Value / 100m : null
             )).ToList(),
             expense.SplitType,
-            expense.CreatedBy
+            expense.CreatedBy,
+            expense.IsTransfer
         );
 
     private static HashSet<string> GetAllParticipantIds(Trip trip)

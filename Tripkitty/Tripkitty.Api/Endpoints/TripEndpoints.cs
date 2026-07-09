@@ -120,11 +120,36 @@ public static class TripEndpoints
             return Results.Ok(new { message = "Expense removed" });
         });
 
-        group.MapGet("/{id}/settlements", async (string id, ClaimsPrincipal user, IExpenseService expenseService) =>
+        group.MapGet("/{id}/settlements", async (string id, ClaimsPrincipal user, ISettlementService settlementService) =>
         {
             var userId = GetUserId(user);
-            var settlements = await expenseService.GetSettlementsAsync(id, userId);
+            var settlements = await settlementService.GetAsync(id, userId);
             return Results.Ok(settlements);
+        });
+
+        // Финализация подсчёта: фиксирует транзакции, блокирует расходы и состав участников
+        group.MapPost("/{id}/settlement", async (string id, ClaimsPrincipal user,
+            ISettlementService settlementService) =>
+        {
+            var userId = GetUserId(user);
+            var settlements = await settlementService.FinalizeAsync(id, userId);
+            return Results.Ok(new { settlements });
+        });
+
+        group.MapPost("/{id}/settlement/reopen", async (string id, ClaimsPrincipal user,
+            ISettlementService settlementService) =>
+        {
+            var userId = GetUserId(user);
+            var settlements = await settlementService.ReopenAsync(id, userId);
+            return Results.Ok(new { settlements });
+        });
+
+        group.MapPatch("/{id}/settlement/transactions/{txId}", async (string id, string txId,
+            SetTransactionPaidRequest request, ClaimsPrincipal user, ISettlementService settlementService) =>
+        {
+            var userId = GetUserId(user);
+            var settlements = await settlementService.SetPaidAsync(id, userId, txId, request.Paid);
+            return Results.Ok(new { settlements });
         });
 
         // Мои реквизиты для перевода в этой поездке (override поездки ?? дефолт профиля)

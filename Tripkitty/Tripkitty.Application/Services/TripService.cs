@@ -110,6 +110,8 @@ public class TripService(
 
         trip.Expenses.Clear();
         trip.Guests.Clear();
+        trip.Settlements.Clear();
+        trip.Status = TripStatus.Active;
         trip.Version++;
         await tripRepo.SaveChangesAsync();
 
@@ -132,11 +134,11 @@ public class TripService(
     }
 
     private static TripSummaryDto MapToSummary(Trip t) =>
-        new(t.Id, t.Name, t.Cur, t.OwnerId, t.Start, t.End, t.Version);
+        new(t.Id, t.Name, t.Cur, t.OwnerId, t.Start, t.End, t.Version, t.Status.ToDto());
 
     public static TripDetailDto MapToDetail(Trip t) =>
         new(
-            t.Id, t.Name, t.Cur, t.OwnerId, t.Start, t.End, t.Version,
+            t.Id, t.Name, t.Cur, t.OwnerId, t.Start, t.End, t.Version, t.Status.ToDto(),
             t.Members.Select(m => MemberDto.From(m.User)).ToList(),
             t.Guests.Select(g => GuestDto.From(g)).ToList(),
             t.Expenses.Select(e => new ExpenseDto(
@@ -145,7 +147,7 @@ public class TripService(
                     s.ParticipantId, s.Weight,
                     s.AmountMinor.HasValue ? s.AmountMinor.Value / 100m : null
                 )).ToList(),
-                e.SplitType, e.CreatedBy
+                e.SplitType, e.CreatedBy, e.IsTransfer
             )).ToList(),
             t.Events.Select(ev => new TripEventDto(
                 ev.Id, ev.Title,

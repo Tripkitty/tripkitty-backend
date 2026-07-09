@@ -15,4 +15,5 @@ public interface ITripNotifier
     Task EventAddedAsync(string tripId, TripEventDto ev);
     Task EventUpdatedAsync(string tripId, TripEventDto ev);
     Task EventRemovedAsync(string tripId, string eventId);
+    Task SettlementUpdatedAsync(string tripId, SettlementsResponse settlements);
 }

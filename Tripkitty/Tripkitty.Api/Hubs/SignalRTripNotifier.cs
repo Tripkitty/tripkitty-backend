@@ -56,4 +56,10 @@ public class SignalRTripNotifier(IHubContext<TripHub> hub, ILogger<SignalRTripNo
 
     public Task EventRemovedAsync(string tripId, string eventId) =>
         hub.Clients.Group(tripId).SendAsync("event:removed", new { tripId, eventId });
+
+    public Task SettlementUpdatedAsync(string tripId, SettlementsResponse settlements)
+    {
+        logger.LogInformation("SignalR send settlement:updated to group {TripId} status={Status}", tripId, settlements.Status);
+        return hub.Clients.Group(tripId).SendAsync("settlement:updated", new { tripId, settlements });
+    }
 }
