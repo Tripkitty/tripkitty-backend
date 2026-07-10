@@ -52,6 +52,7 @@ app.MapNotificationEndpoints();
 app.MapCalendarEndpoints();
 app.MapPaymentEndpoints();
 app.MapWhatsNewEndpoints();
+app.MapAdminEndpoints();
 app.MapHub<TripHub>("/hubs/trip");
 app.MapHealthChecks("/health");
 

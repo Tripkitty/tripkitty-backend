@@ -9,6 +9,7 @@ public class User
     public string Handle { get; set; } = "";
     public string Email { get; set; } = "";
     public string PasswordHash { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     // Не маппится в EF (нет сеттера) — отображаемое имя для пушей и DTO
     public string DisplayName => string.IsNullOrEmpty(LastName) ? FirstName : $"{FirstName} {LastName}";
 
