@@ -166,10 +166,10 @@
 | HTTP | Коды |
 |------|------|
 | `400 Bad Request` | `VALIDATION_ERROR` |
-| `403 Forbidden` | `FORBIDDEN` |
+| `403 Forbidden` | `FORBIDDEN`, `NOT_SPONSOR` |
 | `404 Not Found` | `NOT_FOUND`, `PAYMENT_METHOD_NOT_FOUND`, `GUEST_NOT_FOUND`, `TRANSACTION_NOT_FOUND` |
-| `409 Conflict` | `HANDLE_TAKEN`, `EMAIL_TAKEN`, `ALREADY_FRIENDS`, `REQUEST_EXISTS`, `ALREADY_MEMBER`, `PARTICIPANT_HAS_EXPENSES`, `TRIP_SETTLING`, `ALREADY_FINALIZED`, `NOT_FINALIZED`, `TRANSFER_READONLY` |
-| `422 Unprocessable Entity` | `SELF_REQUEST`, `INVALID_PAYER`, `INVALID_SHARE`, `USER_NOT_FOUND`, `WRONG_PASSWORD`, `INVALID_TOKEN`, `VERSION_CONFLICT`, `INVALID_PHONE`, `INVALID_BANK` |
+| `409 Conflict` | `HANDLE_TAKEN`, `EMAIL_TAKEN`, `ALREADY_FRIENDS`, `REQUEST_EXISTS`, `ALREADY_MEMBER`, `PARTICIPANT_HAS_EXPENSES`, `TRIP_HAS_EXPENSES`, `TRIP_SETTLING`, `ALREADY_FINALIZED`, `NOT_FINALIZED`, `TRANSFER_READONLY`, `SPONSOR_CHAIN`, `SPONSOR_TAKEN`, `PARTICIPANT_IS_SPONSOR` |
+| `422 Unprocessable Entity` | `SELF_REQUEST`, `INVALID_PAYER`, `INVALID_SHARE`, `USER_NOT_FOUND`, `WRONG_PASSWORD`, `INVALID_TOKEN`, `VERSION_CONFLICT`, `INVALID_PHONE`, `INVALID_BANK`, `SPONSOR_SELF` |
 | `500 Internal Server Error` | `INTERNAL_ERROR` |
 | `401 Unauthorized` | отсутствует/просрочен access-токен (тело без `error`-обёртки — это ответ middleware аутентификации) |
 
@@ -229,8 +229,8 @@
   "end": "2026-07-10",
   "version": 4,
   "status": "active",
-  "members": [ { "id": "u_...", "name": "Аня Иванова", "lastName": "Иванова", "firstName": "Аня", "middleName": "Петровна", "handle": "anya", "email": "..." } ],
-  "guests":  [ { "id": "g_...", "name": "Петя Сидоров", "lastName": "Сидоров", "firstName": "Петя", "middleName": null, "paymentDetails": { "phone": "+79991234567", "banks": ["TBANK"], "label": null } } ],
+  "members": [ { "id": "u_...", "name": "Аня Иванова", "lastName": "Иванова", "firstName": "Аня", "middleName": "Петровна", "handle": "anya", "email": "...", "sponsorId": null } ],
+  "guests":  [ { "id": "g_...", "name": "Петя Сидоров", "lastName": "Сидоров", "firstName": "Петя", "middleName": null, "paymentDetails": { "phone": "+79991234567", "banks": ["TBANK"], "label": null }, "sponsorId": null } ],
   "expenses":[ { "id": "...", "title": "Такси", "amount": 1200.50, "payer": "u_...", "share": [{"participantId":"u_..."},{"participantId":"g_..."}], "splitType": 0, "createdBy": "u_...", "isTransfer": false } ],
   "events":  [ { "id": "...", "title": "Заезд", "date": "2026-07-01", "time": "14:00", "endTime": null, "createdBy": "u_..." } ]
 }
@@ -261,7 +261,9 @@ If-Match: 4
 
 - `POST /trips/{id}/clear` — очищает содержимое поездки (расходы, гостей, зафиксированный
   подсчёт; статус сбрасывается в `active`), сохраняя её.
-- `DELETE /trips/{id}` — удаляет поездку целиком.
+- `DELETE /trips/{id}` — удаляет поездку целиком. Отказывает кодом `TRIP_HAS_EXPENSES`
+  (409), если в поездке уже есть хотя бы один расход — сначала нужно удалить все расходы
+  (`DELETE /trips/{id}/expenses/{expenseId}`) или очистить поездку через `/clear`.
 
 Оба возвращают `{ "message": "..." }`.
 
@@ -357,6 +359,43 @@ If-Match: 4
 но он всегда актуален на момент ответа сервера — не полагайтесь на локальный
 кэш `TripDetail`, если между действиями прошло время.
 
+Удаление также блокируется, если участник — спонсор общего бюджета (§4.4):
+`409 PARTICIPANT_IS_SPONSOR`, `error.details.participantIds` — список подопечных.
+Сначала нужно снять общий бюджет, потом удалять.
+
+### 4.4 Общий бюджет (спонсор)
+
+«Я еду с женой, все её траты оплачиваю я»: у участника или гостя может быть
+назначен **спонсор** — другой участник, который берёт его расходы на себя.
+Поле `sponsorId` есть в `MemberDto` и `GuestDto` (`null` = нет спонсора).
+
+`PATCH /trips/{id}/participants/{participantId}/sponsor`
+
+```json
+{ "sponsorId": "u_..." }
+```
+
+`sponsorId: null` — снять спонсорство. Ответ `{ "trip": TripDetail }` (полный DTO,
+как в §3.3); мутация повышает `version` и шлёт `trip:updated` по SignalR.
+
+Правила:
+
+- Назначить спонсором можно **только себя**: `sponsorId` должен совпадать с id
+  вызывающего, иначе `403 NOT_SPONSOR`. Снять — только текущий спонсор (тоже
+  `403 NOT_SPONSOR`).
+- Самому себе — нельзя (`422 SPONSOR_SELF`).
+- Цепочки запрещены (`409 SPONSOR_CHAIN`): у спонсора не может быть своего
+  спонсора, а подопечный не может сам спонсировать других.
+- Если за участника уже платит кто-то другой — `409 SPONSOR_TAKEN` (сначала
+  текущий спонсор должен снять бюджет).
+- В статусах `settling`/`settled` изменение заблокировано (`409 TRIP_SETTLING`).
+
+Расходы при этом вводятся **как обычно** — подопечный участвует в `share` и может
+сам быть `payer`. Спонсорство влияет только на итоговый расчёт (§5.4): баланс
+подопечного (и долги, и его платежи) переливается спонсору, в переводы подопечный
+не попадает. Фича ретроактивна и обратима — включение/снятие в любой момент
+пересчитывает весь расчёт.
+
 ---
 
 ## 5. Расходы и взаиморасчёты
@@ -418,6 +457,24 @@ If-Match: 4
 ```
 Сумма `amount` в `share` должна точно совпадать с полем `amount` (допуск ±0.01).
 
+**Скидка** — необязательные поля `grossAmount` + (`discountPercent` **или** `discountAmount`,
+не оба сразу). `amount` в запросе — это итоговая сумма **после** скидки (то, что реально
+делится между участниками через `share`); `grossAmount`/`discount*` — только для
+отображения, во что расход обошёлся до скидки. Скидка 10% на счёт 1000₽:
+```json
+{
+  "title": "Ресторан",
+  "amount": 900,
+  "grossAmount": 1000,
+  "discountPercent": 10,
+  "payer": "u_...",
+  "splitType": 0,
+  "share": [{ "participantId": "u_..." }, { "participantId": "g_..." }]
+}
+```
+Сервер проверяет, что `grossAmount` за вычетом скидки совпадает с `amount` (допуск ±0.01)
+— это не влияет на `SplitType`/`share`, которые по-прежнему делят `amount` (net-сумму).
+
 Правила валидации:
 
 - `title` — непустой (`VALIDATION_ERROR`, field `title`).
@@ -427,6 +484,11 @@ If-Match: 4
   (`INVALID_SHARE`). Дубликаты в `share` сервер схлопывает автоматически.
 - `ByShares`: все `weight` обязательны и `> 0` (`VALIDATION_ERROR`, field `share`).
 - `ByAmounts`: все `amount` обязательны и `> 0`, сумма должна равняться `amount` (`VALIDATION_ERROR`, field `share`).
+- Скидка: нельзя указать `discountPercent` и `discountAmount` одновременно
+  (`VALIDATION_ERROR`, field `discount`); если указана скидка — `grossAmount` обязателен
+  и `> 0` (field `grossAmount`); `discountPercent` — `0..100` (field `discountPercent`);
+  `discountAmount` — `>= 0` (field `discountAmount`); `grossAmount` минус скидка должен
+  равняться `amount` с допуском ±0.01 (field `amount`).
 
 > **Реквизиты для перевода** к расходу **не** привязываются. Куда переводить,
 > определяется на этапе взаиморасчётов по реквизитам **получателя** (`toPayment` в
@@ -448,7 +510,10 @@ If-Match: 4
     { "participantId": "g_...", "weight": null, "amount": null }
   ],
   "createdBy": "u_...",
-  "isTransfer": false
+  "isTransfer": false,
+  "grossAmount": null,
+  "discountPercent": null,
+  "discountAmount": null
 }
 ```
 
@@ -463,7 +528,14 @@ If-Match: 4
 обязательны, действуют те же правила валидации. Частичного PATCH (null = не менять)
 здесь нет — форма пересылается целиком.
 
-Ответ `{ "expense": ExpenseDto }`.
+Ответ `{ "expense": ExpenseDto, "warning": string | null }`.
+
+`warning: "TRIP_HAS_PAID_TRANSFERS"` — в поездке уже есть оплаченные расходы-переводы
+(был reopen после частичной оплаты, §5.5). Правка суммы/состава расхода может изменить
+остаток чужого долга — уже переведённые деньги не теряются, но пересчитываются заново.
+Это не ошибка (200 OK) — просто предупреждение для UI, покажите его пользователю перед
+сохранением или в тосте после. Привязки к конкретному расходу нет: флаг говорит про
+поездку в целом, а не про то, что именно этот расход уже был оплачен.
 
 ### 5.3 Удалить расход
 
@@ -481,6 +553,11 @@ If-Match: 4
     "u_petya": -400.25,
     "g_kolya": -400.25
   },
+  "ownBalances": {
+    "u_anya": 800.50,
+    "u_petya": -400.25,
+    "g_kolya": -400.25
+  },
   "transactions": [
     { "from": "u_petya", "to": "u_anya", "amount": 400.25, "toPayment": { "phone": "+79991234567", "banks": ["SBERBANK", "TBANK"], "label": "Основной" }, "id": null, "isPaid": null, "paidAt": null },
     { "from": "g_kolya", "to": "u_anya", "amount": 400.25, "toPayment": { "phone": "+79991234567", "banks": ["SBERBANK", "TBANK"], "label": "Основной" }, "id": null, "isPaid": null, "paidAt": null }
@@ -490,7 +567,12 @@ If-Match: 4
 
 - `status` — стадия подсчёта поездки, та же что в trip-DTO (см. §5.5).
 - `balances` — итоговый баланс каждого участника: **положительный** = ему должны,
-  **отрицательный** = должен он.
+  **отрицательный** = должен он. Считается **после слияния общих бюджетов** (§4.4):
+  у подопечных здесь всегда `0`, их баланс перелит спонсору.
+- `ownBalances` — персональные балансы **до** слияния бюджетов. Без спонсоров
+  совпадает с `balances`. Используйте для прозрачности: «сколько из долга спонсора —
+  траты подопечного» (`ownBalances[dependent]`); в UI подопечных показывайте внутри
+  блока спонсора, а не как «ничего не должен».
 - `transactions` — минимальный набор переводов «кто кому сколько», чтобы
   обнулить балансы (жадный алгоритм). `from` платит `to` сумму `amount`.
   Пока `status: "active"` это **предварительный** расчёт: он пересчитывается при
@@ -875,9 +957,10 @@ const json = sub.toJSON(); // { endpoint, keys: { p256dh, auth } }
 2. [ ] Единая обработка ошибок по `error.code` (а не по тексту).
 3. [ ] `If-Match` при каждом `PATCH /trips/{id}` + обработка `VERSION_CONFLICT`.
 4. [ ] Обработка `PARTICIPANT_HAS_EXPENSES` (409) при удалении участника — предложить сначала удалить/переназначить его расходы.
-5. [ ] Суммы — decimal с 2 знаками; долги берём из `/settlements`, сами не считаем.
-6. [ ] Реквизиты для перевода берём из `toPayment` в `/settlements`, не привязываем к расходу.
-7. [ ] SignalR: `accessTokenFactory` со свежим токеном, `JoinTrip`/`LeaveTrip`,
+5. [ ] Обработка `TRIP_HAS_EXPENSES` (409) при удалении поездки — предложить сначала очистить/удалить расходы.
+6. [ ] Суммы — decimal с 2 знаками; долги берём из `/settlements`, сами не считаем.
+7. [ ] Реквизиты для перевода берём из `toPayment` в `/settlements`, не привязываем к расходу.
+8. [ ] SignalR: `accessTokenFactory` со свежим токеном, `JoinTrip`/`LeaveTrip`,
        повторный `JoinTrip` после реконнекта.
-8. [ ] Web Push: SW зарегистрирован, ключ получен, подписка отправлена/снимается.
-9. [ ] Фронтенд-домен добавлен в `Cors:AllowedOrigins` на бэкенде.
+9. [ ] Web Push: SW зарегистрирован, ключ получен, подписка отправлена/снимается.
+10. [ ] Фронтенд-домен добавлен в `Cors:AllowedOrigins` на бэкенде.

@@ -12,3 +12,6 @@ public record UpdateGuestRequest(
     string? MiddleName,
     PaymentDetailsRequest? PaymentDetails = null,
     bool ClearPayment = false);
+
+// null = снять спонсорство (выделенный эндпоинт, чтобы null был выразим при STJ)
+public record SetSponsorRequest(string? SponsorId);

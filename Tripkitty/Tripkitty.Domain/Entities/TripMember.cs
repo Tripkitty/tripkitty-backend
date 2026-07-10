@@ -8,4 +8,5 @@ public class TripMember
     public Trip Trip { get; set; } = null!;
     public User User { get; set; } = null!;
     public PaymentDetails? PaymentDetails { get; set; } // реквизиты юзера в этой поездке (override), JSONB
+    public string? SponsorId { get; set; } // participantId того, кто платит за этого участника (общий бюджет)
 }

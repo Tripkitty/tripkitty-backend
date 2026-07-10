@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Tripkitty.Domain.Entities;
@@ -13,9 +14,11 @@ using Tripkitty.Infrastructure.Data;
 namespace Tripkitty.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260710053236_AddSponsorId")]
+    partial class AddSponsorId
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -35,15 +38,6 @@ namespace Tripkitty.Infrastructure.Migrations
                     b.Property<string>("CreatedBy")
                         .IsRequired()
                         .HasColumnType("text");
-
-                    b.Property<long?>("DiscountAmountMinor")
-                        .HasColumnType("bigint");
-
-                    b.Property<decimal?>("DiscountPercent")
-                        .HasColumnType("numeric");
-
-                    b.Property<long?>("GrossAmountMinor")
-                        .HasColumnType("bigint");
 
                     b.Property<bool>("IsTransfer")
                         .HasColumnType("boolean");

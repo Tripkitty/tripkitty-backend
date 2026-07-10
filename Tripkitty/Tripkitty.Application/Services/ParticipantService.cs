@@ -11,6 +11,7 @@ public interface IParticipantService
     Task<GuestDto> AddGuestAsync(string tripId, string currentUserId, AddGuestRequest request);
     Task<GuestDto> UpdateGuestAsync(string tripId, string currentUserId, string guestId, UpdateGuestRequest request);
     Task RemoveParticipantAsync(string tripId, string currentUserId, string participantId);
+    Task<TripDetailDto> SetSponsorAsync(string tripId, string currentUserId, string participantId, string? sponsorId);
     Task<TripPaymentDto> GetMyPaymentAsync(string tripId, string userId);
     Task<TripPaymentDto> SetMyPaymentAsync(string tripId, string userId, PaymentDetailsRequest? request);
 }
@@ -209,6 +210,16 @@ public class ParticipantService(
                 "Нельзя удалить участника, пока на нём есть расходы — сначала удалите или переназначьте их",
                 details: new { expenseIds = blockingExpenseIds });
 
+        // Спонсора нельзя удалить, пока на него ссылаются подопечные — молчаливый
+        // сброс спонсорства тихо менял бы, кто кому должен.
+        var dependentIds = trip.Members.Where(m => m.SponsorId == participantId).Select(m => m.UserId)
+            .Concat(trip.Guests.Where(g => g.SponsorId == participantId).Select(g => g.Id))
+            .ToList();
+        if (dependentIds.Count > 0)
+            throw new DomainException("PARTICIPANT_IS_SPONSOR",
+                "Участник платит за других в этой поездке — сначала снимите общий бюджет",
+                details: new { participantIds = dependentIds });
+
         if (memberToRemove is not null)
             trip.Members.Remove(memberToRemove);
         if (guestToRemove is not null)
@@ -218,6 +229,69 @@ public class ParticipantService(
         await tripRepo.SaveChangesAsync();
 
         await notifier.TripUpdatedAsync(tripId, TripService.MapToDetail(trip));
+    }
+
+    // Общий бюджет: назначить себя плательщиком за участника/гостя может только сам
+    // плательщик (sponsorId всегда = caller); снять — только текущий спонсор.
+    public async Task<TripDetailDto> SetSponsorAsync(string tripId, string currentUserId, string participantId, string? sponsorId)
+    {
+        var trip = await tripRepo.GetByIdWithDetailsAsync(tripId)
+                   ?? throw new DomainException("NOT_FOUND", "Trip not found");
+
+        var isMember = trip.Members.Any(m => m.UserId == currentUserId);
+        if (!isMember)
+            throw new DomainException("FORBIDDEN", "You are not a member of this trip");
+
+        EnsureActive(trip);
+
+        var member = trip.Members.FirstOrDefault(m => m.UserId == participantId);
+        var guest = trip.Guests.FirstOrDefault(g => g.Id == participantId);
+        if (member is null && guest is null)
+            throw new DomainException("NOT_FOUND", "Participant not found in this trip");
+
+        var currentSponsorId = member?.SponsorId ?? guest?.SponsorId;
+        if (currentSponsorId == sponsorId)
+            return TripService.MapToDetail(trip);
+
+        if (sponsorId is not null)
+        {
+            if (sponsorId != currentUserId)
+                throw new DomainException("NOT_SPONSOR",
+                    "Взять чьи-то расходы на себя может только сам плательщик");
+
+            if (participantId == currentUserId)
+                throw new DomainException("SPONSOR_SELF", "Нельзя назначить общий бюджет самому себе");
+
+            if (trip.Members.First(m => m.UserId == currentUserId).SponsorId is not null)
+                throw new DomainException("SPONSOR_CHAIN",
+                    "За вас уже платит другой участник — сначала выйдите из его бюджета");
+
+            var participantHasDependents = trip.Members.Any(m => m.SponsorId == participantId)
+                                           || trip.Guests.Any(g => g.SponsorId == participantId);
+            if (participantHasDependents)
+                throw new DomainException("SPONSOR_CHAIN",
+                    "Этот участник сам платит за других — сначала снимите его общий бюджет");
+
+            if (currentSponsorId is not null)
+                throw new DomainException("SPONSOR_TAKEN",
+                    "За этого участника уже платит другой — сначала он должен снять общий бюджет");
+        }
+        else if (currentSponsorId != currentUserId)
+        {
+            throw new DomainException("NOT_SPONSOR", "Снять общий бюджет может только текущий плательщик");
+        }
+
+        if (member is not null)
+            member.SponsorId = sponsorId;
+        if (guest is not null)
+            guest.SponsorId = sponsorId;
+
+        trip.Version++;
+        await tripRepo.SaveChangesAsync();
+
+        var detail = TripService.MapToDetail(trip);
+        await notifier.TripUpdatedAsync(tripId, detail);
+        return detail;
     }
 
     private static void EnsureActive(Trip trip)

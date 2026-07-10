@@ -11,7 +11,10 @@ public record AddExpenseRequest(
     decimal Amount,
     string Payer,
     List<ShareEntryRequest> Share,
-    SplitType SplitType = SplitType.Equal
+    SplitType SplitType = SplitType.Equal,
+    decimal? GrossAmount = null,
+    decimal? DiscountPercent = null,
+    decimal? DiscountAmount = null
 );
 
 // Id/IsPaid/PaidAt заполнены только для зафиксированных транзакций (status != active)
@@ -25,6 +28,11 @@ public record SettlementDto(
     DateTime? PaidAt = null
 );
 
-public record SettlementsResponse(string Status, Dictionary<string, decimal> Balances, List<SettlementDto> Transactions);
+// Balances — после слияния общих бюджетов (у подопечных 0), OwnBalances — персональные до слияния
+public record SettlementsResponse(
+    string Status,
+    Dictionary<string, decimal> Balances,
+    Dictionary<string, decimal> OwnBalances,
+    List<SettlementDto> Transactions);
 
 public record SetTransactionPaidRequest(bool Paid);

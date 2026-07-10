@@ -6,8 +6,9 @@ public record Settlement(string From, string To, decimal Amount);
 
 public static class SettlementsCalculator
 {
-    public static (Dictionary<string, decimal> Balances, List<Settlement> Transactions) Compute(
-        IEnumerable<Expense> expenses)
+    public static (Dictionary<string, decimal> Balances, Dictionary<string, decimal> OwnBalances, List<Settlement> Transactions) Compute(
+        IEnumerable<Expense> expenses,
+        IReadOnlyDictionary<string, string>? sponsorOf = null)
     {
         var bal = new Dictionary<string, decimal>();
 
@@ -56,6 +57,23 @@ public static class SettlementsCalculator
             }
         }
 
+        // Общий бюджет: баланс подопечного (и долги, и его собственные платежи)
+        // переливается спонсору — в транзакции подопечный не попадает.
+        // Цепочки спонсоров не поддерживаются (отсекаются при назначении).
+        // OwnBalances — балансы до слияния, для прозрачности на клиенте.
+        var ownBal = bal;
+        if (sponsorOf is { Count: > 0 })
+        {
+            ownBal = new Dictionary<string, decimal>(bal);
+            foreach (var (dependent, sponsor) in sponsorOf)
+            {
+                if (!bal.TryGetValue(dependent, out var depBal) || depBal == 0) continue;
+                bal.TryAdd(sponsor, 0);
+                bal[sponsor] += depBal;
+                bal[dependent] = 0;
+            }
+        }
+
         // Greedy minimization: repeatedly match biggest creditor with biggest debtor
         var tx = new List<Settlement>();
 
@@ -98,6 +116,6 @@ public static class SettlementsCalculator
             if (Math.Abs(debtAmounts[debtIdx]) < 0.005m) debtIdx++;
         }
 
-        return (bal, tx);
+        return (bal, ownBal, tx);
     }
 }

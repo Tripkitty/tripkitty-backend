@@ -9,7 +9,8 @@ public class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionMiddlewa
     private static readonly HashSet<string> ConflictCodes = new()
     {
         "HANDLE_TAKEN", "EMAIL_TAKEN", "ALREADY_FRIENDS", "REQUEST_EXISTS", "ALREADY_MEMBER", "PARTICIPANT_HAS_EXPENSES",
-        "TRIP_SETTLING", "ALREADY_FINALIZED", "NOT_FINALIZED", "TRANSFER_READONLY"
+        "TRIP_SETTLING", "ALREADY_FINALIZED", "NOT_FINALIZED", "TRANSFER_READONLY",
+        "SPONSOR_CHAIN", "SPONSOR_TAKEN", "PARTICIPANT_IS_SPONSOR", "TRIP_HAS_EXPENSES"
     };
 
     private static readonly HashSet<string> NotFoundCodes = new()
@@ -19,14 +20,14 @@ public class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionMiddlewa
 
     private static readonly HashSet<string> ForbiddenCodes = new()
     {
-        "FORBIDDEN"
+        "FORBIDDEN", "NOT_SPONSOR"
     };
 
     private static readonly HashSet<string> UnprocessableCodes = new()
     {
         "SELF_REQUEST", "INVALID_PAYER", "INVALID_SHARE", "USER_NOT_FOUND",
         "WRONG_PASSWORD", "INVALID_TOKEN", "VERSION_CONFLICT",
-        "INVALID_PHONE", "INVALID_BANK"
+        "INVALID_PHONE", "INVALID_BANK", "SPONSOR_SELF"
     };
 
     public async Task InvokeAsync(HttpContext context)

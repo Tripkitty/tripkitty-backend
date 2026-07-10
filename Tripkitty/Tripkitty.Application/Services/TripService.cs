@@ -127,6 +127,9 @@ public class TripService(
         if (trip.OwnerId != userId)
             throw new DomainException("FORBIDDEN", "Only the owner can delete a trip");
 
+        if (trip.Expenses.Count > 0)
+            throw new DomainException("TRIP_HAS_EXPENSES", "Нельзя удалить поездку, в которой уже есть расходы");
+
         await tripRepo.DeleteAsync(trip);
         await tripRepo.SaveChangesAsync();
 
@@ -139,7 +142,7 @@ public class TripService(
     public static TripDetailDto MapToDetail(Trip t) =>
         new(
             t.Id, t.Name, t.Cur, t.OwnerId, t.Start, t.End, t.Version, t.Status.ToDto(),
-            t.Members.Select(m => MemberDto.From(m.User)).ToList(),
+            t.Members.Select(MemberDto.From).ToList(),
             t.Guests.Select(g => GuestDto.From(g)).ToList(),
             t.Expenses.Select(e => new ExpenseDto(
                 e.Id, e.Title, e.AmountMinor / 100m, e.Payer,
@@ -147,7 +150,10 @@ public class TripService(
                     s.ParticipantId, s.Weight,
                     s.AmountMinor.HasValue ? s.AmountMinor.Value / 100m : null
                 )).ToList(),
-                e.SplitType, e.CreatedBy, e.IsTransfer
+                e.SplitType, e.CreatedBy, e.IsTransfer,
+                e.GrossAmountMinor.HasValue ? e.GrossAmountMinor.Value / 100m : null,
+                e.DiscountPercent,
+                e.DiscountAmountMinor.HasValue ? e.DiscountAmountMinor.Value / 100m : null
             )).ToList(),
             t.Events.Select(ev => new TripEventDto(
                 ev.Id, ev.Title,
