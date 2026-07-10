@@ -23,7 +23,7 @@ public class SettlementsCalculatorTests
     [Fact]
     public void NoExpenses_ReturnsEmptyBalancesAndTransactions()
     {
-        var (balances, transactions) = SettlementsCalculator.Compute([]);
+        var (balances, _, transactions) = SettlementsCalculator.Compute([]);
 
         Assert.Empty(balances);
         Assert.Empty(transactions);
@@ -36,7 +36,7 @@ public class SettlementsCalculatorTests
         // alice: +300 - 150 = +150, bob: -150
         var expense = MakeExpense(30000, "alice", ["alice", "bob"]);
 
-        var (balances, transactions) = SettlementsCalculator.Compute([expense]);
+        var (balances, _, transactions) = SettlementsCalculator.Compute([expense]);
 
         Assert.Equal(150m, balances["alice"]);
         Assert.Equal(-150m, balances["bob"]);
@@ -51,7 +51,7 @@ public class SettlementsCalculatorTests
     {
         var expense = MakeExpense(30000, "alice", ["alice", "bob"]);
 
-        var (balances, _) = SettlementsCalculator.Compute([expense]);
+        var (balances, _, _) = SettlementsCalculator.Compute([expense]);
 
         Assert.Equal(300m - 150m, balances["alice"]);
         Assert.Equal(-150m, balances["bob"]);
@@ -62,7 +62,7 @@ public class SettlementsCalculatorTests
     {
         var expense = MakeExpense(30000, "alice", ["bob", "charlie"]);
 
-        var (balances, transactions) = SettlementsCalculator.Compute([expense]);
+        var (balances, _, transactions) = SettlementsCalculator.Compute([expense]);
 
         Assert.Equal(300m, balances["alice"]);
         Assert.Equal(-150m, balances["bob"]);
@@ -76,7 +76,7 @@ public class SettlementsCalculatorTests
     {
         var expense = MakeExpense(10000, "alice", []);
 
-        var (balances, transactions) = SettlementsCalculator.Compute([expense]);
+        var (balances, _, transactions) = SettlementsCalculator.Compute([expense]);
 
         Assert.Empty(balances);
         Assert.Empty(transactions);
@@ -91,7 +91,7 @@ public class SettlementsCalculatorTests
             MakeExpense(3000, "bob",   ["bob", "charlie"]),
         };
 
-        var (balances, transactions) = SettlementsCalculator.Compute(expenses);
+        var (balances, _, transactions) = SettlementsCalculator.Compute(expenses);
 
         Assert.Equal(40m, balances["alice"]);
         Assert.Equal(-5m, balances["bob"]);
@@ -110,7 +110,7 @@ public class SettlementsCalculatorTests
             MakeExpense(10000, "bob",   ["alice"]),
         };
 
-        var (_, transactions) = SettlementsCalculator.Compute(expenses);
+        var (_, _, transactions) = SettlementsCalculator.Compute(expenses);
 
         Assert.Empty(transactions);
     }
@@ -120,7 +120,7 @@ public class SettlementsCalculatorTests
     {
         var expense = MakeExpense(9000, "alice", ["alice", "bob", "charlie"]);
 
-        var (_, transactions) = SettlementsCalculator.Compute([expense]);
+        var (_, _, transactions) = SettlementsCalculator.Compute([expense]);
 
         Assert.Equal(2, transactions.Count);
         Assert.All(transactions, t => Assert.Equal("alice", t.To));
@@ -132,7 +132,7 @@ public class SettlementsCalculatorTests
     {
         var expense = MakeExpense(100, "alice", ["alice", "bob", "charlie"]);
 
-        var (balances, transactions) = SettlementsCalculator.Compute([expense]);
+        var (balances, _, transactions) = SettlementsCalculator.Compute([expense]);
 
         Assert.True(balances.ContainsKey("alice"));
         Assert.All(transactions, t => Assert.True(t.Amount > 0));
@@ -147,7 +147,7 @@ public class SettlementsCalculatorTests
             MakeExpense(1, "bob",   ["alice"]),
         };
 
-        var (_, transactions) = SettlementsCalculator.Compute(expenses);
+        var (_, _, transactions) = SettlementsCalculator.Compute(expenses);
 
         Assert.Empty(transactions);
     }
@@ -160,7 +160,7 @@ public class SettlementsCalculatorTests
         var expense = MakeExpense(9000, "alice", ["alice", "bob"],
             SplitType.ByShares, weights: [2, 1]);
 
-        var (balances, transactions) = SettlementsCalculator.Compute([expense]);
+        var (balances, _, transactions) = SettlementsCalculator.Compute([expense]);
 
         Assert.Equal(30m, balances["alice"]);
         Assert.Equal(-30m, balances["bob"]);
@@ -179,7 +179,7 @@ public class SettlementsCalculatorTests
         var expense = MakeExpense(12000, "bob", ["alice", "bob"],
             SplitType.ByShares, weights: [1, 3]);
 
-        var (balances, _) = SettlementsCalculator.Compute([expense]);
+        var (balances, _, _) = SettlementsCalculator.Compute([expense]);
 
         Assert.Equal(-30m, balances["alice"]);
         Assert.Equal(30m, balances["bob"]);
@@ -193,7 +193,7 @@ public class SettlementsCalculatorTests
         var expense = MakeExpense(10000, "alice", ["alice", "bob", "charlie"],
             SplitType.ByAmounts, amounts: [5000, 3000, 2000]);
 
-        var (balances, transactions) = SettlementsCalculator.Compute([expense]);
+        var (balances, _, transactions) = SettlementsCalculator.Compute([expense]);
 
         Assert.Equal(50m, balances["alice"]);
         Assert.Equal(-30m, balances["bob"]);
@@ -210,11 +210,95 @@ public class SettlementsCalculatorTests
         var expense = MakeExpense(10000, "alice", ["bob", "charlie"],
             SplitType.ByAmounts, amounts: [6000, 4000]);
 
-        var (balances, transactions) = SettlementsCalculator.Compute([expense]);
+        var (balances, _, transactions) = SettlementsCalculator.Compute([expense]);
 
         Assert.Equal(100m, balances["alice"]);
         Assert.Equal(-60m, balances["bob"]);
         Assert.Equal(-40m, balances["charlie"]);
         Assert.Equal(2, transactions.Count);
+    }
+
+    [Fact]
+    public void Sponsor_AbsorbsDependentDebt_DependentNotInTransactions()
+    {
+        // Bob pays 300 for [alice, wife, bob]; alice sponsors wife
+        // own: bob +200, alice -100, wife -100 => merged: alice -200
+        var expense = MakeExpense(30000, "bob", ["alice", "wife", "bob"]);
+        var sponsorOf = new Dictionary<string, string> { ["wife"] = "alice" };
+
+        var (balances, ownBalances, transactions) = SettlementsCalculator.Compute([expense], sponsorOf);
+
+        Assert.Equal(-200m, balances["alice"]);
+        Assert.Equal(0m, balances["wife"]);
+        Assert.Equal(-100m, ownBalances["alice"]);
+        Assert.Equal(-100m, ownBalances["wife"]);
+
+        var tx = Assert.Single(transactions);
+        Assert.Equal("alice", tx.From);
+        Assert.Equal("bob", tx.To);
+        Assert.Equal(200m, tx.Amount);
+    }
+
+    [Fact]
+    public void Sponsor_DependentPayment_CreditsSponsor()
+    {
+        // Wife pays 300 for [alice, wife, bob]; alice sponsors wife
+        // own: wife +200, alice -100, bob -100 => merged: alice +100, bob -100
+        var expense = MakeExpense(30000, "wife", ["alice", "wife", "bob"]);
+        var sponsorOf = new Dictionary<string, string> { ["wife"] = "alice" };
+
+        var (balances, _, transactions) = SettlementsCalculator.Compute([expense], sponsorOf);
+
+        Assert.Equal(100m, balances["alice"]);
+        Assert.Equal(0m, balances["wife"]);
+        Assert.Equal(-100m, balances["bob"]);
+
+        var tx = Assert.Single(transactions);
+        Assert.Equal("bob", tx.From);
+        Assert.Equal("alice", tx.To);
+        Assert.Equal(100m, tx.Amount);
+    }
+
+    [Fact]
+    public void Sponsor_GroupInternalExpense_SettlesToZero()
+    {
+        // Alice pays 200 for [alice, wife]; alice sponsors wife — внутри бюджета долгов нет
+        var expense = MakeExpense(20000, "alice", ["alice", "wife"]);
+        var sponsorOf = new Dictionary<string, string> { ["wife"] = "alice" };
+
+        var (balances, _, transactions) = SettlementsCalculator.Compute([expense], sponsorOf);
+
+        Assert.Equal(0m, balances["alice"]);
+        Assert.Equal(0m, balances["wife"]);
+        Assert.Empty(transactions);
+    }
+
+    [Fact]
+    public void Sponsor_MultipleDependents_AllMergeIntoSponsor()
+    {
+        // Bob pays 400 for [alice, bro1, bro2, bob]; alice sponsors both brothers
+        var expense = MakeExpense(40000, "bob", ["alice", "bro1", "bro2", "bob"]);
+        var sponsorOf = new Dictionary<string, string> { ["bro1"] = "alice", ["bro2"] = "alice" };
+
+        var (balances, _, transactions) = SettlementsCalculator.Compute([expense], sponsorOf);
+
+        Assert.Equal(-300m, balances["alice"]);
+        Assert.Equal(0m, balances["bro1"]);
+        Assert.Equal(0m, balances["bro2"]);
+
+        var tx = Assert.Single(transactions);
+        Assert.Equal("alice", tx.From);
+        Assert.Equal("bob", tx.To);
+        Assert.Equal(300m, tx.Amount);
+    }
+
+    [Fact]
+    public void NoSponsors_OwnBalancesEqualBalances()
+    {
+        var expense = MakeExpense(30000, "alice", ["alice", "bob"]);
+
+        var (balances, ownBalances, _) = SettlementsCalculator.Compute([expense]);
+
+        Assert.Equal(balances, ownBalances);
     }
 }

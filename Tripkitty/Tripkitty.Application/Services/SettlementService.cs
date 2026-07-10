@@ -35,7 +35,7 @@ public class SettlementService(
         if (trip.Status != TripStatus.Active)
             throw new DomainException("ALREADY_FINALIZED", "Подсчёт уже завершён");
 
-        var (_, transactions) = SettlementsCalculator.Compute(trip.Expenses);
+        var (_, _, transactions) = SettlementsCalculator.Compute(trip.Expenses, SponsorMap(trip));
 
         foreach (var t in transactions)
         {
@@ -197,7 +197,7 @@ public class SettlementService(
 
     private async Task<SettlementsResponse> BuildResponseAsync(Trip trip)
     {
-        var (balances, computed) = SettlementsCalculator.Compute(trip.Expenses);
+        var (balances, ownBalances, computed) = SettlementsCalculator.Compute(trip.Expenses, SponsorMap(trip));
 
         // Active — живой предварительный расчёт; иначе — зафиксированные транзакции
         var transactions = trip.Status == TripStatus.Active
@@ -243,6 +243,16 @@ public class SettlementService(
             return t with { ToPayment = toPayment };
         }).ToList();
 
-        return new SettlementsResponse(trip.Status.ToDto(), balances, transactions);
+        return new SettlementsResponse(trip.Status.ToDto(), balances, ownBalances, transactions);
+    }
+
+    private static Dictionary<string, string> SponsorMap(Trip trip)
+    {
+        var map = new Dictionary<string, string>();
+        foreach (var m in trip.Members.Where(m => m.SponsorId is not null))
+            map[m.UserId] = m.SponsorId!;
+        foreach (var g in trip.Guests.Where(g => g.SponsorId is not null))
+            map[g.Id] = g.SponsorId!;
+        return map;
     }
 }

@@ -87,6 +87,15 @@ public static class TripEndpoints
             return Results.Ok(new { guest });
         });
 
+        // Общий бюджет: sponsorId = сам вызывающий, null = снять
+        group.MapPatch("/{id}/participants/{participantId}/sponsor", async (string id, string participantId,
+            SetSponsorRequest request, ClaimsPrincipal user, IParticipantService participantService) =>
+        {
+            var userId = GetUserId(user);
+            var trip = await participantService.SetSponsorAsync(id, userId, participantId, request.SponsorId);
+            return Results.Ok(new { trip });
+        });
+
         group.MapDelete("/{id}/participants/{participantId}", async (string id, string participantId,
             ClaimsPrincipal user, IParticipantService participantService) =>
         {

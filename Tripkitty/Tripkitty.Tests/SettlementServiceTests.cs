@@ -76,6 +76,25 @@ public class SettlementServiceTests
     }
 
     [Fact]
+    public async Task Finalize_AppliesSponsorMap_DependentNotInTransactions()
+    {
+        // u_2 в бюджете u_1: его долг уходит спонсору, в транзакциях u_2 нет
+        var trip = MakeTrip("u_1", "u_2", "u_3");
+        trip.Members.Single(m => m.UserId == "u_2").SponsorId = "u_1";
+        trip.Expenses.Add(EqualExpense("u_3", 300m, "u_1", "u_2", "u_3"));
+
+        var response = await _sut.FinalizeAsync("t1", "u_1");
+
+        var tx = Assert.Single(trip.Settlements);
+        Assert.Equal("u_1", tx.FromId);
+        Assert.Equal("u_3", tx.ToId);
+        Assert.Equal(20000, tx.AmountMinor);
+        Assert.Equal(-200m, response.Balances["u_1"]);
+        Assert.Equal(0m, response.Balances["u_2"]);
+        Assert.Equal(-100m, response.OwnBalances["u_2"]);
+    }
+
+    [Fact]
     public async Task Finalize_ThrowsForbidden_WhenNotOwner()
     {
         MakeTrip("u_1", "u_2");
@@ -418,7 +437,7 @@ public class SettlementsCalculatorTransferTests
             }
         };
 
-        var (balances, transactions) = SettlementsCalculator.Compute(expenses);
+        var (balances, _, transactions) = SettlementsCalculator.Compute(expenses);
 
         Assert.Empty(transactions);
         Assert.Equal(0m, balances["u_1"]);

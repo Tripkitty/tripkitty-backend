@@ -166,10 +166,10 @@
 | HTTP | Коды |
 |------|------|
 | `400 Bad Request` | `VALIDATION_ERROR` |
-| `403 Forbidden` | `FORBIDDEN` |
+| `403 Forbidden` | `FORBIDDEN`, `NOT_SPONSOR` |
 | `404 Not Found` | `NOT_FOUND`, `PAYMENT_METHOD_NOT_FOUND`, `GUEST_NOT_FOUND`, `TRANSACTION_NOT_FOUND` |
-| `409 Conflict` | `HANDLE_TAKEN`, `EMAIL_TAKEN`, `ALREADY_FRIENDS`, `REQUEST_EXISTS`, `ALREADY_MEMBER`, `PARTICIPANT_HAS_EXPENSES`, `TRIP_SETTLING`, `ALREADY_FINALIZED`, `NOT_FINALIZED`, `TRANSFER_READONLY` |
-| `422 Unprocessable Entity` | `SELF_REQUEST`, `INVALID_PAYER`, `INVALID_SHARE`, `USER_NOT_FOUND`, `WRONG_PASSWORD`, `INVALID_TOKEN`, `VERSION_CONFLICT`, `INVALID_PHONE`, `INVALID_BANK` |
+| `409 Conflict` | `HANDLE_TAKEN`, `EMAIL_TAKEN`, `ALREADY_FRIENDS`, `REQUEST_EXISTS`, `ALREADY_MEMBER`, `PARTICIPANT_HAS_EXPENSES`, `TRIP_SETTLING`, `ALREADY_FINALIZED`, `NOT_FINALIZED`, `TRANSFER_READONLY`, `SPONSOR_CHAIN`, `SPONSOR_TAKEN`, `PARTICIPANT_IS_SPONSOR` |
+| `422 Unprocessable Entity` | `SELF_REQUEST`, `INVALID_PAYER`, `INVALID_SHARE`, `USER_NOT_FOUND`, `WRONG_PASSWORD`, `INVALID_TOKEN`, `VERSION_CONFLICT`, `INVALID_PHONE`, `INVALID_BANK`, `SPONSOR_SELF` |
 | `500 Internal Server Error` | `INTERNAL_ERROR` |
 | `401 Unauthorized` | отсутствует/просрочен access-токен (тело без `error`-обёртки — это ответ middleware аутентификации) |
 
@@ -229,8 +229,8 @@
   "end": "2026-07-10",
   "version": 4,
   "status": "active",
-  "members": [ { "id": "u_...", "name": "Аня Иванова", "lastName": "Иванова", "firstName": "Аня", "middleName": "Петровна", "handle": "anya", "email": "..." } ],
-  "guests":  [ { "id": "g_...", "name": "Петя Сидоров", "lastName": "Сидоров", "firstName": "Петя", "middleName": null, "paymentDetails": { "phone": "+79991234567", "banks": ["TBANK"], "label": null } } ],
+  "members": [ { "id": "u_...", "name": "Аня Иванова", "lastName": "Иванова", "firstName": "Аня", "middleName": "Петровна", "handle": "anya", "email": "...", "sponsorId": null } ],
+  "guests":  [ { "id": "g_...", "name": "Петя Сидоров", "lastName": "Сидоров", "firstName": "Петя", "middleName": null, "paymentDetails": { "phone": "+79991234567", "banks": ["TBANK"], "label": null }, "sponsorId": null } ],
   "expenses":[ { "id": "...", "title": "Такси", "amount": 1200.50, "payer": "u_...", "share": [{"participantId":"u_..."},{"participantId":"g_..."}], "splitType": 0, "createdBy": "u_...", "isTransfer": false } ],
   "events":  [ { "id": "...", "title": "Заезд", "date": "2026-07-01", "time": "14:00", "endTime": null, "createdBy": "u_..." } ]
 }
@@ -356,6 +356,43 @@ If-Match: 4
 и для превентивной проверки на клиенте (подсветить блокирующие расходы),
 но он всегда актуален на момент ответа сервера — не полагайтесь на локальный
 кэш `TripDetail`, если между действиями прошло время.
+
+Удаление также блокируется, если участник — спонсор общего бюджета (§4.4):
+`409 PARTICIPANT_IS_SPONSOR`, `error.details.participantIds` — список подопечных.
+Сначала нужно снять общий бюджет, потом удалять.
+
+### 4.4 Общий бюджет (спонсор)
+
+«Я еду с женой, все её траты оплачиваю я»: у участника или гостя может быть
+назначен **спонсор** — другой участник, который берёт его расходы на себя.
+Поле `sponsorId` есть в `MemberDto` и `GuestDto` (`null` = нет спонсора).
+
+`PATCH /trips/{id}/participants/{participantId}/sponsor`
+
+```json
+{ "sponsorId": "u_..." }
+```
+
+`sponsorId: null` — снять спонсорство. Ответ `{ "trip": TripDetail }` (полный DTO,
+как в §3.3); мутация повышает `version` и шлёт `trip:updated` по SignalR.
+
+Правила:
+
+- Назначить спонсором можно **только себя**: `sponsorId` должен совпадать с id
+  вызывающего, иначе `403 NOT_SPONSOR`. Снять — только текущий спонсор (тоже
+  `403 NOT_SPONSOR`).
+- Самому себе — нельзя (`422 SPONSOR_SELF`).
+- Цепочки запрещены (`409 SPONSOR_CHAIN`): у спонсора не может быть своего
+  спонсора, а подопечный не может сам спонсировать других.
+- Если за участника уже платит кто-то другой — `409 SPONSOR_TAKEN` (сначала
+  текущий спонсор должен снять бюджет).
+- В статусах `settling`/`settled` изменение заблокировано (`409 TRIP_SETTLING`).
+
+Расходы при этом вводятся **как обычно** — подопечный участвует в `share` и может
+сам быть `payer`. Спонсорство влияет только на итоговый расчёт (§5.4): баланс
+подопечного (и долги, и его платежи) переливается спонсору, в переводы подопечный
+не попадает. Фича ретроактивна и обратима — включение/снятие в любой момент
+пересчитывает весь расчёт.
 
 ---
 
@@ -488,6 +525,11 @@ If-Match: 4
     "u_petya": -400.25,
     "g_kolya": -400.25
   },
+  "ownBalances": {
+    "u_anya": 800.50,
+    "u_petya": -400.25,
+    "g_kolya": -400.25
+  },
   "transactions": [
     { "from": "u_petya", "to": "u_anya", "amount": 400.25, "toPayment": { "phone": "+79991234567", "banks": ["SBERBANK", "TBANK"], "label": "Основной" }, "id": null, "isPaid": null, "paidAt": null },
     { "from": "g_kolya", "to": "u_anya", "amount": 400.25, "toPayment": { "phone": "+79991234567", "banks": ["SBERBANK", "TBANK"], "label": "Основной" }, "id": null, "isPaid": null, "paidAt": null }
@@ -497,7 +539,12 @@ If-Match: 4
 
 - `status` — стадия подсчёта поездки, та же что в trip-DTO (см. §5.5).
 - `balances` — итоговый баланс каждого участника: **положительный** = ему должны,
-  **отрицательный** = должен он.
+  **отрицательный** = должен он. Считается **после слияния общих бюджетов** (§4.4):
+  у подопечных здесь всегда `0`, их баланс перелит спонсору.
+- `ownBalances` — персональные балансы **до** слияния бюджетов. Без спонсоров
+  совпадает с `balances`. Используйте для прозрачности: «сколько из долга спонсора —
+  траты подопечного» (`ownBalances[dependent]`); в UI подопечных показывайте внутри
+  блока спонсора, а не как «ничего не должен».
 - `transactions` — минимальный набор переводов «кто кому сколько», чтобы
   обнулить балансы (жадный алгоритм). `from` платит `to` сумму `amount`.
   Пока `status: "active"` это **предварительный** расчёт: он пересчитывается при

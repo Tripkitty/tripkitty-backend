@@ -25,6 +25,11 @@ public record SettlementDto(
     DateTime? PaidAt = null
 );
 
-public record SettlementsResponse(string Status, Dictionary<string, decimal> Balances, List<SettlementDto> Transactions);
+// Balances — после слияния общих бюджетов (у подопечных 0), OwnBalances — персональные до слияния
+public record SettlementsResponse(
+    string Status,
+    Dictionary<string, decimal> Balances,
+    Dictionary<string, decimal> OwnBalances,
+    List<SettlementDto> Transactions);
 
 public record SetTransactionPaidRequest(bool Paid);
