@@ -12,5 +12,8 @@ public class Expense
     public SplitType SplitType { get; set; } = SplitType.Equal;
     public string CreatedBy { get; set; } = ""; // userId
     public bool IsTransfer { get; set; } // перевод, созданный при reopen из оплаченной транзакции; read-only
+    public long? GrossAmountMinor { get; set; } // сумма до скидки, если скидка была
+    public decimal? DiscountPercent { get; set; } // 0..100, если скидка процентом
+    public long? DiscountAmountMinor { get; set; } // фикс. скидка в минорных единицах
 
 }

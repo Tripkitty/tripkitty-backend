@@ -38,7 +38,10 @@ public class ExpenseService(
             Payer = request.Payer,
             Share = shareEntries,
             SplitType = request.SplitType,
-            CreatedBy = userId
+            CreatedBy = userId,
+            GrossAmountMinor = request.GrossAmount.HasValue ? (long)Math.Round(request.GrossAmount.Value * 100) : null,
+            DiscountPercent = request.DiscountPercent,
+            DiscountAmountMinor = request.DiscountAmount.HasValue ? (long)Math.Round(request.DiscountAmount.Value * 100) : null
         };
 
         trip.Expenses.Add(expense);
@@ -83,6 +86,9 @@ public class ExpenseService(
         expense.Payer = request.Payer;
         expense.Share = shareEntries;
         expense.SplitType = request.SplitType;
+        expense.GrossAmountMinor = request.GrossAmount.HasValue ? (long)Math.Round(request.GrossAmount.Value * 100) : null;
+        expense.DiscountPercent = request.DiscountPercent;
+        expense.DiscountAmountMinor = request.DiscountAmount.HasValue ? (long)Math.Round(request.DiscountAmount.Value * 100) : null;
 
         trip.Version++;
         await tripRepo.SaveChangesAsync();
@@ -133,6 +139,8 @@ public class ExpenseService(
         if (request.Amount <= 0)
             throw new DomainException("VALIDATION_ERROR", "Amount must be positive", "amount");
 
+        ValidateDiscount(request);
+
         if (string.IsNullOrWhiteSpace(request.Payer))
             throw new DomainException("VALIDATION_ERROR", "Payer is required", "payer");
 
@@ -160,6 +168,36 @@ public class ExpenseService(
                 AmountMinor = s.Amount.HasValue ? (long)Math.Round(s.Amount.Value * 100) : null
             })
             .ToList();
+    }
+
+    private static void ValidateDiscount(AddExpenseRequest request)
+    {
+        if (request.DiscountPercent.HasValue && request.DiscountAmount.HasValue)
+            throw new DomainException("VALIDATION_ERROR",
+                "Specify either discount percent or discount amount, not both", "discount");
+
+        if (!request.DiscountPercent.HasValue && !request.DiscountAmount.HasValue)
+            return;
+
+        if (!request.GrossAmount.HasValue || request.GrossAmount.Value <= 0)
+            throw new DomainException("VALIDATION_ERROR",
+                "Gross amount is required when a discount is set", "grossAmount");
+
+        if (request.DiscountPercent is < 0 or > 100)
+            throw new DomainException("VALIDATION_ERROR",
+                "Discount percent must be between 0 and 100", "discountPercent");
+
+        if (request.DiscountAmount is < 0)
+            throw new DomainException("VALIDATION_ERROR",
+                "Discount amount must not be negative", "discountAmount");
+
+        var expectedNet = request.DiscountPercent.HasValue
+            ? request.GrossAmount.Value * (1 - request.DiscountPercent.Value / 100m)
+            : request.GrossAmount.Value - request.DiscountAmount!.Value;
+
+        if (Math.Abs(expectedNet - request.Amount) > 0.01m)
+            throw new DomainException("VALIDATION_ERROR",
+                $"Amount after discount ({expectedNet:F2}) must equal total amount ({request.Amount:F2})", "amount");
     }
 
     private static void ValidateSplitType(AddExpenseRequest request)
@@ -198,7 +236,10 @@ public class ExpenseService(
             )).ToList(),
             expense.SplitType,
             expense.CreatedBy,
-            expense.IsTransfer
+            expense.IsTransfer,
+            expense.GrossAmountMinor.HasValue ? expense.GrossAmountMinor.Value / 100m : null,
+            expense.DiscountPercent,
+            expense.DiscountAmountMinor.HasValue ? expense.DiscountAmountMinor.Value / 100m : null
         );
 
     private static HashSet<string> GetAllParticipantIds(Trip trip)

@@ -457,6 +457,24 @@ If-Match: 4
 ```
 Сумма `amount` в `share` должна точно совпадать с полем `amount` (допуск ±0.01).
 
+**Скидка** — необязательные поля `grossAmount` + (`discountPercent` **или** `discountAmount`,
+не оба сразу). `amount` в запросе — это итоговая сумма **после** скидки (то, что реально
+делится между участниками через `share`); `grossAmount`/`discount*` — только для
+отображения, во что расход обошёлся до скидки. Скидка 10% на счёт 1000₽:
+```json
+{
+  "title": "Ресторан",
+  "amount": 900,
+  "grossAmount": 1000,
+  "discountPercent": 10,
+  "payer": "u_...",
+  "splitType": 0,
+  "share": [{ "participantId": "u_..." }, { "participantId": "g_..." }]
+}
+```
+Сервер проверяет, что `grossAmount` за вычетом скидки совпадает с `amount` (допуск ±0.01)
+— это не влияет на `SplitType`/`share`, которые по-прежнему делят `amount` (net-сумму).
+
 Правила валидации:
 
 - `title` — непустой (`VALIDATION_ERROR`, field `title`).
@@ -466,6 +484,11 @@ If-Match: 4
   (`INVALID_SHARE`). Дубликаты в `share` сервер схлопывает автоматически.
 - `ByShares`: все `weight` обязательны и `> 0` (`VALIDATION_ERROR`, field `share`).
 - `ByAmounts`: все `amount` обязательны и `> 0`, сумма должна равняться `amount` (`VALIDATION_ERROR`, field `share`).
+- Скидка: нельзя указать `discountPercent` и `discountAmount` одновременно
+  (`VALIDATION_ERROR`, field `discount`); если указана скидка — `grossAmount` обязателен
+  и `> 0` (field `grossAmount`); `discountPercent` — `0..100` (field `discountPercent`);
+  `discountAmount` — `>= 0` (field `discountAmount`); `grossAmount` минус скидка должен
+  равняться `amount` с допуском ±0.01 (field `amount`).
 
 > **Реквизиты для перевода** к расходу **не** привязываются. Куда переводить,
 > определяется на этапе взаиморасчётов по реквизитам **получателя** (`toPayment` в
@@ -487,7 +510,10 @@ If-Match: 4
     { "participantId": "g_...", "weight": null, "amount": null }
   ],
   "createdBy": "u_...",
-  "isTransfer": false
+  "isTransfer": false,
+  "grossAmount": null,
+  "discountPercent": null,
+  "discountAmount": null
 }
 ```
 

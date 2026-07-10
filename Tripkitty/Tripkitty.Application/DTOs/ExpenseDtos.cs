@@ -11,7 +11,10 @@ public record AddExpenseRequest(
     decimal Amount,
     string Payer,
     List<ShareEntryRequest> Share,
-    SplitType SplitType = SplitType.Equal
+    SplitType SplitType = SplitType.Equal,
+    decimal? GrossAmount = null,
+    decimal? DiscountPercent = null,
+    decimal? DiscountAmount = null
 );
 
 // Id/IsPaid/PaidAt заполнены только для зафиксированных транзакций (status != active)

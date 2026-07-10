@@ -150,7 +150,10 @@ public class TripService(
                     s.ParticipantId, s.Weight,
                     s.AmountMinor.HasValue ? s.AmountMinor.Value / 100m : null
                 )).ToList(),
-                e.SplitType, e.CreatedBy, e.IsTransfer
+                e.SplitType, e.CreatedBy, e.IsTransfer,
+                e.GrossAmountMinor.HasValue ? e.GrossAmountMinor.Value / 100m : null,
+                e.DiscountPercent,
+                e.DiscountAmountMinor.HasValue ? e.DiscountAmountMinor.Value / 100m : null
             )).ToList(),
             t.Events.Select(ev => new TripEventDto(
                 ev.Id, ev.Title,
