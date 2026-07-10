@@ -10,7 +10,7 @@ public class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionMiddlewa
     {
         "HANDLE_TAKEN", "EMAIL_TAKEN", "ALREADY_FRIENDS", "REQUEST_EXISTS", "ALREADY_MEMBER", "PARTICIPANT_HAS_EXPENSES",
         "TRIP_SETTLING", "ALREADY_FINALIZED", "NOT_FINALIZED", "TRANSFER_READONLY",
-        "SPONSOR_CHAIN", "SPONSOR_TAKEN", "PARTICIPANT_IS_SPONSOR"
+        "SPONSOR_CHAIN", "SPONSOR_TAKEN", "PARTICIPANT_IS_SPONSOR", "TRIP_HAS_EXPENSES"
     };
 
     private static readonly HashSet<string> NotFoundCodes = new()

@@ -168,7 +168,7 @@
 | `400 Bad Request` | `VALIDATION_ERROR` |
 | `403 Forbidden` | `FORBIDDEN`, `NOT_SPONSOR` |
 | `404 Not Found` | `NOT_FOUND`, `PAYMENT_METHOD_NOT_FOUND`, `GUEST_NOT_FOUND`, `TRANSACTION_NOT_FOUND` |
-| `409 Conflict` | `HANDLE_TAKEN`, `EMAIL_TAKEN`, `ALREADY_FRIENDS`, `REQUEST_EXISTS`, `ALREADY_MEMBER`, `PARTICIPANT_HAS_EXPENSES`, `TRIP_SETTLING`, `ALREADY_FINALIZED`, `NOT_FINALIZED`, `TRANSFER_READONLY`, `SPONSOR_CHAIN`, `SPONSOR_TAKEN`, `PARTICIPANT_IS_SPONSOR` |
+| `409 Conflict` | `HANDLE_TAKEN`, `EMAIL_TAKEN`, `ALREADY_FRIENDS`, `REQUEST_EXISTS`, `ALREADY_MEMBER`, `PARTICIPANT_HAS_EXPENSES`, `TRIP_HAS_EXPENSES`, `TRIP_SETTLING`, `ALREADY_FINALIZED`, `NOT_FINALIZED`, `TRANSFER_READONLY`, `SPONSOR_CHAIN`, `SPONSOR_TAKEN`, `PARTICIPANT_IS_SPONSOR` |
 | `422 Unprocessable Entity` | `SELF_REQUEST`, `INVALID_PAYER`, `INVALID_SHARE`, `USER_NOT_FOUND`, `WRONG_PASSWORD`, `INVALID_TOKEN`, `VERSION_CONFLICT`, `INVALID_PHONE`, `INVALID_BANK`, `SPONSOR_SELF` |
 | `500 Internal Server Error` | `INTERNAL_ERROR` |
 | `401 Unauthorized` | отсутствует/просрочен access-токен (тело без `error`-обёртки — это ответ middleware аутентификации) |
@@ -261,7 +261,9 @@ If-Match: 4
 
 - `POST /trips/{id}/clear` — очищает содержимое поездки (расходы, гостей, зафиксированный
   подсчёт; статус сбрасывается в `active`), сохраняя её.
-- `DELETE /trips/{id}` — удаляет поездку целиком.
+- `DELETE /trips/{id}` — удаляет поездку целиком. Отказывает кодом `TRIP_HAS_EXPENSES`
+  (409), если в поездке уже есть хотя бы один расход — сначала нужно удалить все расходы
+  (`DELETE /trips/{id}/expenses/{expenseId}`) или очистить поездку через `/clear`.
 
 Оба возвращают `{ "message": "..." }`.
 
@@ -929,9 +931,10 @@ const json = sub.toJSON(); // { endpoint, keys: { p256dh, auth } }
 2. [ ] Единая обработка ошибок по `error.code` (а не по тексту).
 3. [ ] `If-Match` при каждом `PATCH /trips/{id}` + обработка `VERSION_CONFLICT`.
 4. [ ] Обработка `PARTICIPANT_HAS_EXPENSES` (409) при удалении участника — предложить сначала удалить/переназначить его расходы.
-5. [ ] Суммы — decimal с 2 знаками; долги берём из `/settlements`, сами не считаем.
-6. [ ] Реквизиты для перевода берём из `toPayment` в `/settlements`, не привязываем к расходу.
-7. [ ] SignalR: `accessTokenFactory` со свежим токеном, `JoinTrip`/`LeaveTrip`,
+5. [ ] Обработка `TRIP_HAS_EXPENSES` (409) при удалении поездки — предложить сначала очистить/удалить расходы.
+6. [ ] Суммы — decimal с 2 знаками; долги берём из `/settlements`, сами не считаем.
+7. [ ] Реквизиты для перевода берём из `toPayment` в `/settlements`, не привязываем к расходу.
+8. [ ] SignalR: `accessTokenFactory` со свежим токеном, `JoinTrip`/`LeaveTrip`,
        повторный `JoinTrip` после реконнекта.
-8. [ ] Web Push: SW зарегистрирован, ключ получен, подписка отправлена/снимается.
-9. [ ] Фронтенд-домен добавлен в `Cors:AllowedOrigins` на бэкенде.
+9. [ ] Web Push: SW зарегистрирован, ключ получен, подписка отправлена/снимается.
+10. [ ] Фронтенд-домен добавлен в `Cors:AllowedOrigins` на бэкенде.

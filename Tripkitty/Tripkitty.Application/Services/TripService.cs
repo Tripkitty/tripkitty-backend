@@ -127,6 +127,9 @@ public class TripService(
         if (trip.OwnerId != userId)
             throw new DomainException("FORBIDDEN", "Only the owner can delete a trip");
 
+        if (trip.Expenses.Count > 0)
+            throw new DomainException("TRIP_HAS_EXPENSES", "Нельзя удалить поездку, в которой уже есть расходы");
+
         await tripRepo.DeleteAsync(trip);
         await tripRepo.SaveChangesAsync();
 
