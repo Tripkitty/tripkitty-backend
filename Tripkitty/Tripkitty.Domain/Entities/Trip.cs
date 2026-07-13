@@ -11,6 +11,7 @@ public class Trip
     public DateOnly? End { get; set; }
     public long Version { get; set; } = 1;
     public TripStatus Status { get; set; } = TripStatus.Active;
+    public bool IsArchived { get; set; }
     public ICollection<TripMember> Members { get; set; } = new List<TripMember>();
     public ICollection<Guest> Guests { get; set; } = new List<Guest>();
     public ICollection<Expense> Expenses { get; set; } = new List<Expense>();

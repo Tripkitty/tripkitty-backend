@@ -184,7 +184,9 @@
 
 ### 3.1 Список поездок
 
-`GET /trips` → `{ "trips": [TripSummary, ...] }`
+`GET /trips` → `{ "trips": [TripSummary, ...] }` — по умолчанию отдаёт только
+**неархивные** поездки. `GET /trips?archived=true` — отдаёт только архивные
+(отдельный список, не объединяются).
 
 ```json
 {
@@ -195,13 +197,15 @@
   "start": "2026-07-01",
   "end": "2026-07-10",
   "version": 4,
-  "status": "active"
+  "status": "active",
+  "isArchived": false
 }
 ```
 
 `start` / `end` — даты в формате `YYYY-MM-DD` (могут быть `null`).
 `version` нужен для оптимистичной блокировки (см. 3.4).
 `status` — стадия подсчёта: `"active"` | `"settling"` | `"settled"` (см. §5.5).
+`isArchived` — см. §3.6.
 
 ### 3.2 Создание
 
@@ -229,6 +233,7 @@
   "end": "2026-07-10",
   "version": 4,
   "status": "active",
+  "isArchived": false,
   "members": [ { "id": "u_...", "name": "Аня Иванова", "lastName": "Иванова", "firstName": "Аня", "middleName": "Петровна", "handle": "anya", "email": "...", "sponsorId": null } ],
   "guests":  [ { "id": "g_...", "name": "Петя Сидоров", "lastName": "Сидоров", "firstName": "Петя", "middleName": null, "paymentDetails": { "phone": "+79991234567", "banks": ["TBANK"], "label": null }, "sponsorId": null } ],
   "expenses":[ { "id": "...", "title": "Такси", "amount": 1200.50, "payer": "u_...", "share": [{"participantId":"u_..."},{"participantId":"g_..."}], "splitType": 0, "createdBy": "u_...", "isTransfer": false } ],
@@ -266,6 +271,22 @@ If-Match: 4
   (`DELETE /trips/{id}/expenses/{expenseId}`) или очистить поездку через `/clear`.
 
 Оба возвращают `{ "message": "..." }`.
+
+### 3.6 Архивация
+
+Архивация — способ убрать завершённые поездки с главного экрана, не удаляя их
+(в отличие от `DELETE`, ничем не блокируется — можно архивировать поездку
+с любым количеством расходов).
+
+- `POST /trips/{id}/archive` → `{ "trip": TripDetail }`, `isArchived: true`.
+- `POST /trips/{id}/unarchive` → `{ "trip": TripDetail }`, `isArchived: false`.
+
+Доступно любому участнику поездки (как `/clear`, без ограничения владельцем).
+Мутация повышает `version` и шлёт `trip:updated` по SignalR — остальные участники
+увидят поездку в архиве в реальном времени. Список поездок (§3.1) фильтруется
+по `isArchived` через query-параметр `archived`; на архивированную поездку
+по-прежнему можно зайти через `GET /trips/{id}` и работать с ней как обычно
+(расходы, участники, расчёт не блокируются статусом архива).
 
 ---
 
