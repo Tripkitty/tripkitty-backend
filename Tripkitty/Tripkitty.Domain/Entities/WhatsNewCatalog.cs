@@ -8,6 +8,11 @@ public static class WhatsNewCatalog
 {
     public static readonly IReadOnlyList<WhatsNewRelease> Releases = new[]
     {
+        new WhatsNewRelease(6, "Архивация поездок", new DateOnly(2026, 7, 13), new[]
+        {
+            "Завершённые поездки можно архивировать — они пропадают с главного экрана, но не удаляются",
+            "Архивную поездку можно вернуть обратно в общий список в любой момент",
+        }),
         new WhatsNewRelease(5, "Общий бюджет и скидки", new DateOnly(2026, 7, 10), new[]
         {
             "Общий бюджет: один участник может платить за другого — расходы подопечного учитываются в расчёте у спонсора",
