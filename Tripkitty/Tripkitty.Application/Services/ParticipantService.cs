@@ -199,10 +199,11 @@ public class ParticipantService(
         if (memberToRemove is null && guestToRemove is null)
             throw new DomainException("NOT_FOUND", "Participant not found in this trip");
 
-        // Participant must have no expense involvement — payer or in someone's share —
+        // Participant must have no expense involvement — payer, in someone's share, or the
+        // sponsor whom an involved participant's money redirects to (Expense.Sponsors) —
         // before removal; caller deletes/reassigns those expenses first, no auto-cascade.
         var blockingExpenseIds = trip.Expenses
-            .Where(e => e.Payer == participantId || e.Share.Any(s => s.ParticipantId == participantId))
+            .Where(e => ExpenseInvolves(e, participantId))
             .Select(e => e.Id)
             .ToList();
         if (blockingExpenseIds.Count > 0)
@@ -220,6 +221,17 @@ public class ParticipantService(
                 "Участник платит за других в этой поездке — сначала снимите общий бюджет",
                 details: new { participantIds = dependentIds });
 
+        // Инертные упоминания в снапшотах общего бюджета (пара не влияет на расчёт,
+        // иначе удаление было бы заблокировано выше) вычищаются, чтобы карты расходов
+        // не ссылались на несуществующих участников.
+        foreach (var e in trip.Expenses)
+        {
+            if (!e.Sponsors.Any(kv => kv.Key == participantId || kv.Value == participantId)) continue;
+            e.Sponsors = e.Sponsors
+                .Where(kv => kv.Key != participantId && kv.Value != participantId)
+                .ToDictionary(kv => kv.Key, kv => kv.Value);
+        }
+
         if (memberToRemove is not null)
             trip.Members.Remove(memberToRemove);
         if (guestToRemove is not null)
@@ -233,6 +245,9 @@ public class ParticipantService(
 
     // Общий бюджет: назначить себя плательщиком за участника/гостя может только сам
     // плательщик (sponsorId всегда = caller); снять — только текущий спонсор.
+    // Флаг — дефолт для НОВЫХ расходов: каждый расход снапшотит карту спонсорства
+    // при создании (Expense.Sponsors), поэтому включение/снятие не трогает уже
+    // внесённые расходы. Точечно пары правятся через PATCH расхода.
     public async Task<TripDetailDto> SetSponsorAsync(string tripId, string currentUserId, string participantId, string? sponsorId)
     {
         var trip = await tripRepo.GetByIdWithDetailsAsync(tripId)
@@ -293,6 +308,12 @@ public class ParticipantService(
         await notifier.TripUpdatedAsync(tripId, detail);
         return detail;
     }
+
+    private static bool ExpenseInvolves(Expense e, string participantId) =>
+        e.Payer == participantId
+        || e.Share.Any(s => s.ParticipantId == participantId)
+        || e.Sponsors.Any(kv => kv.Value == participantId &&
+                                (e.Payer == kv.Key || e.Share.Any(s => s.ParticipantId == kv.Key)));
 
     private static void EnsureActive(Trip trip)
     {

@@ -78,10 +78,12 @@ public class SettlementServiceTests
     [Fact]
     public async Task Finalize_AppliesSponsorMap_DependentNotInTransactions()
     {
-        // u_2 в бюджете u_1: его долг уходит спонсору, в транзакциях u_2 нет
+        // Расход снапшотнул бюджет {u_2 → u_1}: долг u_2 уходит спонсору, в транзакциях u_2 нет
         var trip = MakeTrip("u_1", "u_2", "u_3");
         trip.Members.Single(m => m.UserId == "u_2").SponsorId = "u_1";
-        trip.Expenses.Add(EqualExpense("u_3", 300m, "u_1", "u_2", "u_3"));
+        var expense = EqualExpense("u_3", 300m, "u_1", "u_2", "u_3");
+        expense.Sponsors = new Dictionary<string, string> { ["u_2"] = "u_1" };
+        trip.Expenses.Add(expense);
 
         var response = await _sut.FinalizeAsync("t1", "u_1");
 

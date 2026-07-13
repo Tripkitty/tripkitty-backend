@@ -6,7 +6,8 @@ namespace Tripkitty.Tests;
 public class SettlementsCalculatorTests
 {
     private static Expense MakeExpense(long amountMinor, string payer, List<string> participantIds,
-        SplitType splitType = SplitType.Equal, int[]? weights = null, long[]? amounts = null) =>
+        SplitType splitType = SplitType.Equal, int[]? weights = null, long[]? amounts = null,
+        Dictionary<string, string>? sponsors = null) =>
         new()
         {
             AmountMinor = amountMinor,
@@ -17,7 +18,8 @@ public class SettlementsCalculatorTests
                 ParticipantId = id,
                 Weight = weights?[i],
                 AmountMinor = amounts?[i]
-            }).ToList()
+            }).ToList(),
+            Sponsors = sponsors ?? new Dictionary<string, string>()
         };
 
     [Fact]
@@ -223,10 +225,10 @@ public class SettlementsCalculatorTests
     {
         // Bob pays 300 for [alice, wife, bob]; alice sponsors wife
         // own: bob +200, alice -100, wife -100 => merged: alice -200
-        var expense = MakeExpense(30000, "bob", ["alice", "wife", "bob"]);
-        var sponsorOf = new Dictionary<string, string> { ["wife"] = "alice" };
+        var expense = MakeExpense(30000, "bob", ["alice", "wife", "bob"],
+            sponsors: new() { ["wife"] = "alice" });
 
-        var (balances, ownBalances, transactions) = SettlementsCalculator.Compute([expense], sponsorOf);
+        var (balances, ownBalances, transactions) = SettlementsCalculator.Compute([expense]);
 
         Assert.Equal(-200m, balances["alice"]);
         Assert.Equal(0m, balances["wife"]);
@@ -244,10 +246,10 @@ public class SettlementsCalculatorTests
     {
         // Wife pays 300 for [alice, wife, bob]; alice sponsors wife
         // own: wife +200, alice -100, bob -100 => merged: alice +100, bob -100
-        var expense = MakeExpense(30000, "wife", ["alice", "wife", "bob"]);
-        var sponsorOf = new Dictionary<string, string> { ["wife"] = "alice" };
+        var expense = MakeExpense(30000, "wife", ["alice", "wife", "bob"],
+            sponsors: new() { ["wife"] = "alice" });
 
-        var (balances, _, transactions) = SettlementsCalculator.Compute([expense], sponsorOf);
+        var (balances, _, transactions) = SettlementsCalculator.Compute([expense]);
 
         Assert.Equal(100m, balances["alice"]);
         Assert.Equal(0m, balances["wife"]);
@@ -263,10 +265,10 @@ public class SettlementsCalculatorTests
     public void Sponsor_GroupInternalExpense_SettlesToZero()
     {
         // Alice pays 200 for [alice, wife]; alice sponsors wife — внутри бюджета долгов нет
-        var expense = MakeExpense(20000, "alice", ["alice", "wife"]);
-        var sponsorOf = new Dictionary<string, string> { ["wife"] = "alice" };
+        var expense = MakeExpense(20000, "alice", ["alice", "wife"],
+            sponsors: new() { ["wife"] = "alice" });
 
-        var (balances, _, transactions) = SettlementsCalculator.Compute([expense], sponsorOf);
+        var (balances, _, transactions) = SettlementsCalculator.Compute([expense]);
 
         Assert.Equal(0m, balances["alice"]);
         Assert.Equal(0m, balances["wife"]);
@@ -277,10 +279,10 @@ public class SettlementsCalculatorTests
     public void Sponsor_MultipleDependents_AllMergeIntoSponsor()
     {
         // Bob pays 400 for [alice, bro1, bro2, bob]; alice sponsors both brothers
-        var expense = MakeExpense(40000, "bob", ["alice", "bro1", "bro2", "bob"]);
-        var sponsorOf = new Dictionary<string, string> { ["bro1"] = "alice", ["bro2"] = "alice" };
+        var expense = MakeExpense(40000, "bob", ["alice", "bro1", "bro2", "bob"],
+            sponsors: new() { ["bro1"] = "alice", ["bro2"] = "alice" });
 
-        var (balances, _, transactions) = SettlementsCalculator.Compute([expense], sponsorOf);
+        var (balances, _, transactions) = SettlementsCalculator.Compute([expense]);
 
         Assert.Equal(-300m, balances["alice"]);
         Assert.Equal(0m, balances["bro1"]);
@@ -300,5 +302,60 @@ public class SettlementsCalculatorTests
         var (balances, ownBalances, _) = SettlementsCalculator.Compute([expense]);
 
         Assert.Equal(balances, ownBalances);
+    }
+
+    [Fact]
+    public void PerExpenseSponsors_MixedExpenses_OnlySponsoredOnesRedirect()
+    {
+        // Ресторан: alice платит 300 за [alice, wife, bob], долю wife покрывает alice.
+        // Шопинг: bob платит 100 за [wife] — без спонсорства, чисто её трата.
+        var restaurant = MakeExpense(30000, "alice", ["alice", "wife", "bob"],
+            sponsors: new() { ["wife"] = "alice" });
+        var shopping = MakeExpense(10000, "bob", ["wife"]);
+
+        var (balances, ownBalances, transactions) = SettlementsCalculator.Compute([restaurant, shopping]);
+
+        // Ресторан: alice +300-100-100(за wife) = +100, bob -100.
+        // Шопинг: wife -100, bob +100 => итог: alice +100, bob 0, wife -100
+        Assert.Equal(100m, balances["alice"]);
+        Assert.Equal(0m, balances["bob"]);
+        Assert.Equal(-100m, balances["wife"]);
+
+        Assert.Equal(-200m, ownBalances["wife"]); // персонально: и ресторан, и шопинг
+
+        var tx = Assert.Single(transactions);
+        Assert.Equal("wife", tx.From);
+        Assert.Equal("alice", tx.To);
+        Assert.Equal(100m, tx.Amount);
+    }
+
+    [Fact]
+    public void PerExpenseSponsors_FullyCoveredDependent_PresentInBalancesWithZero()
+    {
+        var expense = MakeExpense(30000, "bob", ["alice", "wife", "bob"],
+            sponsors: new() { ["wife"] = "alice" });
+
+        var (balances, _, _) = SettlementsCalculator.Compute([expense]);
+
+        // Подопечный не выпадает из Balances, даже если всё покрыто спонсором
+        Assert.True(balances.ContainsKey("wife"));
+        Assert.Equal(0m, balances["wife"]);
+    }
+
+    [Fact]
+    public void PerExpenseSponsors_SponsorNotElsewhereInvolved_ReceivesRedirect()
+    {
+        // Спонсор вообще не участвует в расходе — но долю подопечного получает он
+        var expense = MakeExpense(20000, "bob", ["wife", "bob"],
+            sponsors: new() { ["wife"] = "alice" });
+
+        var (balances, _, transactions) = SettlementsCalculator.Compute([expense]);
+
+        Assert.Equal(-100m, balances["alice"]);
+        Assert.Equal(0m, balances["wife"]);
+
+        var tx = Assert.Single(transactions);
+        Assert.Equal("alice", tx.From);
+        Assert.Equal("bob", tx.To);
     }
 }

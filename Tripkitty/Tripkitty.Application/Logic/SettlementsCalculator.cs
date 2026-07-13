@@ -7,10 +7,15 @@ public record Settlement(string From, string To, decimal Amount);
 public static class SettlementsCalculator
 {
     public static (Dictionary<string, decimal> Balances, Dictionary<string, decimal> OwnBalances, List<Settlement> Transactions) Compute(
-        IEnumerable<Expense> expenses,
-        IReadOnlyDictionary<string, string>? sponsorOf = null)
+        IEnumerable<Expense> expenses)
     {
+        // Общий бюджет — по-расходно: у каждого расхода свой снапшот {подопечный → спонсор}
+        // (Expense.Sponsors), и доля/платёж подопечного в этом расходе зачисляется спонсору.
+        // Один и тот же участник может быть покрыт в одних расходах и платить сам в других.
+        // Цепочки внутри расхода невозможны — редирект одношаговый.
+        // OwnBalances — персональные балансы до переливаний, для прозрачности на клиенте.
         var bal = new Dictionary<string, decimal>();
+        var ownBal = new Dictionary<string, decimal>();
 
         foreach (var e in expenses)
         {
@@ -18,8 +23,21 @@ public static class SettlementsCalculator
             var share = e.Share;
             if (share.Count == 0) continue;
 
-            bal.TryAdd(e.Payer, 0);
-            bal[e.Payer] += amount;
+            var sponsors = e.Sponsors;
+
+            void Apply(string participantId, decimal delta)
+            {
+                ownBal.TryAdd(participantId, 0);
+                ownBal[participantId] += delta;
+
+                var effectiveId = sponsors is { Count: > 0 } && sponsors.TryGetValue(participantId, out var sponsor)
+                    ? sponsor
+                    : participantId;
+                bal.TryAdd(effectiveId, 0);
+                bal[effectiveId] += delta;
+            }
+
+            Apply(e.Payer, amount);
 
             switch (e.SplitType)
             {
@@ -27,10 +45,7 @@ public static class SettlementsCalculator
                 {
                     var perPerson = Math.Round(amount / share.Count, 2);
                     foreach (var entry in share)
-                    {
-                        bal.TryAdd(entry.ParticipantId, 0);
-                        bal[entry.ParticipantId] -= perPerson;
-                    }
+                        Apply(entry.ParticipantId, -perPerson);
                     break;
                 }
 
@@ -38,41 +53,22 @@ public static class SettlementsCalculator
                 {
                     var totalWeight = share.Sum(s => s.Weight ?? 1);
                     foreach (var entry in share)
-                    {
-                        bal.TryAdd(entry.ParticipantId, 0);
-                        bal[entry.ParticipantId] -= Math.Round(amount * (entry.Weight ?? 1) / totalWeight, 2);
-                    }
+                        Apply(entry.ParticipantId, -Math.Round(amount * (entry.Weight ?? 1) / totalWeight, 2));
                     break;
                 }
 
                 case SplitType.ByAmounts:
                 {
                     foreach (var entry in share)
-                    {
-                        bal.TryAdd(entry.ParticipantId, 0);
-                        bal[entry.ParticipantId] -= (entry.AmountMinor ?? 0) / 100m;
-                    }
+                        Apply(entry.ParticipantId, -((entry.AmountMinor ?? 0) / 100m));
                     break;
                 }
             }
         }
 
-        // Общий бюджет: баланс подопечного (и долги, и его собственные платежи)
-        // переливается спонсору — в транзакции подопечный не попадает.
-        // Цепочки спонсоров не поддерживаются (отсекаются при назначении).
-        // OwnBalances — балансы до слияния, для прозрачности на клиенте.
-        var ownBal = bal;
-        if (sponsorOf is { Count: > 0 })
-        {
-            ownBal = new Dictionary<string, decimal>(bal);
-            foreach (var (dependent, sponsor) in sponsorOf)
-            {
-                if (!bal.TryGetValue(dependent, out var depBal) || depBal == 0) continue;
-                bal.TryAdd(sponsor, 0);
-                bal[sponsor] += depBal;
-                bal[dependent] = 0;
-            }
-        }
+        // Каждый участник расчёта присутствует в Balances, даже если всё покрыто спонсором
+        foreach (var id in ownBal.Keys)
+            bal.TryAdd(id, 0);
 
         // Greedy minimization: repeatedly match biggest creditor with biggest debtor
         var tx = new List<Settlement>();

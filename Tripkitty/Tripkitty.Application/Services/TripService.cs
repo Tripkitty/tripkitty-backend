@@ -172,7 +172,8 @@ public class TripService(
                 e.SplitType, e.CreatedBy, e.IsTransfer,
                 e.GrossAmountMinor.HasValue ? e.GrossAmountMinor.Value / 100m : null,
                 e.DiscountPercent,
-                e.DiscountAmountMinor.HasValue ? e.DiscountAmountMinor.Value / 100m : null
+                e.DiscountAmountMinor.HasValue ? e.DiscountAmountMinor.Value / 100m : null,
+                e.Sponsors
             )).ToList(),
             t.Events.Select(ev => new TripEventDto(
                 ev.Id, ev.Title,

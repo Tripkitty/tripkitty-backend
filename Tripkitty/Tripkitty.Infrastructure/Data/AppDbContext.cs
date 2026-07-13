@@ -66,6 +66,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<Expense>(e =>
         {
             e.Property(x => x.Share).HasColumnType("jsonb");
+            e.Property(x => x.Sponsors).HasColumnType("jsonb");
             e.Property(x => x.SplitType).HasConversion<int>();
         });
 

@@ -9,6 +9,10 @@ public class Expense
     public long AmountMinor { get; set; } // stored in minor units (e.g. kopeks)
     public string Payer { get; set; } = ""; // participantId
     public List<ShareEntry> Share { get; set; } = new();
+    // Снапшот общего бюджета на момент создания: {подопечный → спонсор}.
+    // Заполняется сервером из живого спонсорства поездки, дальше живёт своей жизнью
+    // (правится через PATCH расхода). У transfer-расходов всегда пустой.
+    public Dictionary<string, string> Sponsors { get; set; } = new();
     public SplitType SplitType { get; set; } = SplitType.Equal;
     public string CreatedBy { get; set; } = ""; // userId
     public bool IsTransfer { get; set; } // перевод, созданный при reopen из оплаченной транзакции; read-only
