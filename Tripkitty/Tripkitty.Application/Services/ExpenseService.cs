@@ -28,6 +28,7 @@ public class ExpenseService(
         EnsureActive(trip);
 
         var shareEntries = ValidateAndBuildShare(trip, request);
+        var sponsors = BuildSponsors(trip, request.Sponsors, existing: null);
 
         var expense = new Expense
         {
@@ -38,6 +39,7 @@ public class ExpenseService(
             Payer = request.Payer,
             Share = shareEntries,
             SplitType = request.SplitType,
+            Sponsors = sponsors,
             CreatedBy = userId,
             GrossAmountMinor = request.GrossAmount.HasValue ? (long)Math.Round(request.GrossAmount.Value * 100) : null,
             DiscountPercent = request.DiscountPercent,
@@ -86,6 +88,7 @@ public class ExpenseService(
         expense.Payer = request.Payer;
         expense.Share = shareEntries;
         expense.SplitType = request.SplitType;
+        expense.Sponsors = BuildSponsors(trip, request.Sponsors, expense.Sponsors);
         expense.GrossAmountMinor = request.GrossAmount.HasValue ? (long)Math.Round(request.GrossAmount.Value * 100) : null;
         expense.DiscountPercent = request.DiscountPercent;
         expense.DiscountAmountMinor = request.DiscountAmount.HasValue ? (long)Math.Round(request.DiscountAmount.Value * 100) : null;
@@ -223,6 +226,40 @@ public class ExpenseService(
         }
     }
 
+    // Общий бюджет расхода: null от клиента = снапшот живого спонсорства (при создании)
+    // либо оставить как было (при правке). Явная карта — только живые пары спонсорства
+    // плюс уже записанные на этом расходе: нельзя «повесить» расход на того, кто
+    // плательщиком быть не соглашался.
+    private static Dictionary<string, string> BuildSponsors(
+        Trip trip, Dictionary<string, string>? requested, Dictionary<string, string>? existing)
+    {
+        var live = LiveSponsorMap(trip);
+
+        if (requested is null)
+            return existing ?? live;
+
+        foreach (var (dependent, sponsor) in requested)
+        {
+            var allowed = (live.TryGetValue(dependent, out var liveSponsor) && liveSponsor == sponsor)
+                          || (existing is not null && existing.TryGetValue(dependent, out var oldSponsor) && oldSponsor == sponsor);
+            if (!allowed)
+                throw new DomainException("INVALID_SPONSORS",
+                    "Такой пары общего бюджета нет ни в поездке, ни в этом расходе", "sponsors");
+        }
+
+        return new Dictionary<string, string>(requested);
+    }
+
+    private static Dictionary<string, string> LiveSponsorMap(Trip trip)
+    {
+        var map = new Dictionary<string, string>();
+        foreach (var m in trip.Members.Where(m => m.SponsorId is not null))
+            map[m.UserId] = m.SponsorId!;
+        foreach (var g in trip.Guests.Where(g => g.SponsorId is not null))
+            map[g.Id] = g.SponsorId!;
+        return map;
+    }
+
     private static ExpenseDto MapToDto(Expense expense, decimal amount) =>
         new(
             expense.Id,
@@ -239,7 +276,8 @@ public class ExpenseService(
             expense.IsTransfer,
             expense.GrossAmountMinor.HasValue ? expense.GrossAmountMinor.Value / 100m : null,
             expense.DiscountPercent,
-            expense.DiscountAmountMinor.HasValue ? expense.DiscountAmountMinor.Value / 100m : null
+            expense.DiscountAmountMinor.HasValue ? expense.DiscountAmountMinor.Value / 100m : null,
+            expense.Sponsors
         );
 
     private static HashSet<string> GetAllParticipantIds(Trip trip)

@@ -168,4 +168,41 @@ public class ParticipantServiceTests
 
         Assert.Empty(trip.Guests);
     }
+
+    [Fact]
+    public async Task RemoveParticipant_Blocks_WhenSponsorInsideExpenseSnapshot()
+    {
+        // u_2 не платил и не в share, но получает редирект доли g_1 из снапшота расхода
+        var trip = MakeTrip("u_1", "u_2");
+        AddGuest(trip, "g_1");
+        trip.Expenses.Add(new Expense
+        {
+            Id = "e1", TripId = "t1", Title = "Ужин", AmountMinor = 10000,
+            Payer = "u_1", Share = [new ShareEntry { ParticipantId = "g_1" }],
+            Sponsors = new Dictionary<string, string> { ["g_1"] = "u_2" }
+        });
+
+        var ex = await Assert.ThrowsAsync<DomainException>(() => _sut.RemoveParticipantAsync("t1", "u_1", "u_2"));
+        Assert.Equal("PARTICIPANT_HAS_EXPENSES", ex.Code);
+    }
+
+    [Fact]
+    public async Task RemoveParticipant_ScrubsInertSponsorEntries()
+    {
+        // Пара {g_1 → u_1} инертна: g_1 не платил и не в share — удаление g_1 проходит
+        // и запись вычищается из снапшота расхода
+        var trip = MakeTrip("u_1", "u_2");
+        AddGuest(trip, "g_1");
+        trip.Expenses.Add(new Expense
+        {
+            Id = "e1", TripId = "t1", Title = "Ужин", AmountMinor = 10000,
+            Payer = "u_1", Share = [new ShareEntry { ParticipantId = "u_2" }],
+            Sponsors = new Dictionary<string, string> { ["g_1"] = "u_1" }
+        });
+
+        await _sut.RemoveParticipantAsync("t1", "u_1", "g_1");
+
+        Assert.Empty(trip.Guests);
+        Assert.Empty(trip.Expenses.Single().Sponsors);
+    }
 }

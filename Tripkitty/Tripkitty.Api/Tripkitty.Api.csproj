@@ -28,6 +28,9 @@
       <Content Include="..\.dockerignore">
         <Link>.dockerignore</Link>
       </Content>
+      <Content Include="..\CLAUDE.md">
+        <Link>Properties\CLAUDE.md</Link>
+      </Content>
       <Content Include="..\docs\CLIENT_API_GUIDE.md">
         <Link>Properties\CLIENT_API_GUIDE.md</Link>
       </Content>

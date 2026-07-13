@@ -25,7 +25,7 @@ public class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionMiddlewa
 
     private static readonly HashSet<string> UnprocessableCodes = new()
     {
-        "SELF_REQUEST", "INVALID_PAYER", "INVALID_SHARE", "USER_NOT_FOUND",
+        "SELF_REQUEST", "INVALID_PAYER", "INVALID_SHARE", "INVALID_SPONSORS", "USER_NOT_FOUND",
         "WRONG_PASSWORD", "INVALID_TOKEN", "VERSION_CONFLICT",
         "INVALID_PHONE", "INVALID_BANK", "SPONSOR_SELF"
     };

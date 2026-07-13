@@ -6,7 +6,7 @@ public record CreateTripRequest(string Name, string Cur = "RUB");
 
 public record PatchTripRequest(string? Name, DateOnly? Start, DateOnly? End);
 
-public record TripSummaryDto(string Id, string Name, string Cur, string OwnerId, DateOnly? Start, DateOnly? End, long Version, string Status);
+public record TripSummaryDto(string Id, string Name, string Cur, string OwnerId, DateOnly? Start, DateOnly? End, long Version, string Status, bool IsArchived);
 
 public static class TripStatusExtensions
 {
@@ -30,7 +30,7 @@ public record GuestDto(string Id, string Name, string LastName, string FirstName
     public static GuestDto From(User u) => new(u.Id, u.DisplayName, u.LastName, u.FirstName, u.MiddleName, null);
 }
 
-public record ExpenseDto(string Id, string Title, decimal Amount, string Payer, List<ShareEntryDto> Share, SplitType SplitType, string CreatedBy, bool IsTransfer = false, decimal? GrossAmount = null, decimal? DiscountPercent = null, decimal? DiscountAmount = null);
+public record ExpenseDto(string Id, string Title, decimal Amount, string Payer, List<ShareEntryDto> Share, SplitType SplitType, string CreatedBy, bool IsTransfer = false, decimal? GrossAmount = null, decimal? DiscountPercent = null, decimal? DiscountAmount = null, Dictionary<string, string>? Sponsors = null);
 
 public record TripEventDto(string Id, string Title, string Date, string? Time, string? EndTime, string CreatedBy);
 
@@ -43,6 +43,7 @@ public record TripDetailDto(
     DateOnly? End,
     long Version,
     string Status,
+    bool IsArchived,
     List<MemberDto> Members,
     List<GuestDto> Guests,
     List<ExpenseDto> Expenses,

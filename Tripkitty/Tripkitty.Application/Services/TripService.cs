@@ -6,12 +6,13 @@ namespace Tripkitty.Application.Services;
 
 public interface ITripService
 {
-    Task<List<TripSummaryDto>> GetAllAsync(string userId);
+    Task<List<TripSummaryDto>> GetAllAsync(string userId, bool archived = false);
     Task<TripDetailDto> GetByIdAsync(string tripId, string userId);
     Task<TripDetailDto> CreateAsync(CreateTripRequest request, string userId);
     Task<TripDetailDto> PatchAsync(string tripId, string userId, PatchTripRequest request, long expectedVersion);
     Task ClearAsync(string tripId, string userId);
     Task DeleteAsync(string tripId, string userId);
+    Task<TripDetailDto> SetArchivedAsync(string tripId, string userId, bool archived);
 }
 
 public interface ITripRepository
@@ -29,10 +30,10 @@ public class TripService(
     ITripRepository tripRepo,
     ITripNotifier notifier) : ITripService
 {
-    public async Task<List<TripSummaryDto>> GetAllAsync(string userId)
+    public async Task<List<TripSummaryDto>> GetAllAsync(string userId, bool archived = false)
     {
         var trips = await tripRepo.GetAllForUserAsync(userId);
-        return trips.Select(MapToSummary).ToList();
+        return trips.Where(t => t.IsArchived == archived).Select(MapToSummary).ToList();
     }
 
     public async Task<TripDetailDto> GetByIdAsync(string tripId, string userId)
@@ -119,6 +120,24 @@ public class TripService(
         _ = notifier.TripUpdatedAsync(tripId, dto);
     }
 
+    public async Task<TripDetailDto> SetArchivedAsync(string tripId, string userId, bool archived)
+    {
+        var trip = await tripRepo.GetByIdWithDetailsAsync(tripId)
+                   ?? throw new DomainException("NOT_FOUND", "Trip not found");
+
+        var isMember = trip.Members.Any(m => m.UserId == userId);
+        if (!isMember)
+            throw new DomainException("FORBIDDEN", "You are not a member of this trip");
+
+        trip.IsArchived = archived;
+        trip.Version++;
+        await tripRepo.SaveChangesAsync();
+
+        var dto = MapToDetail(trip);
+        _ = notifier.TripUpdatedAsync(tripId, dto);
+        return dto;
+    }
+
     public async Task DeleteAsync(string tripId, string userId)
     {
         var trip = await tripRepo.GetByIdWithDetailsAsync(tripId)
@@ -137,11 +156,11 @@ public class TripService(
     }
 
     private static TripSummaryDto MapToSummary(Trip t) =>
-        new(t.Id, t.Name, t.Cur, t.OwnerId, t.Start, t.End, t.Version, t.Status.ToDto());
+        new(t.Id, t.Name, t.Cur, t.OwnerId, t.Start, t.End, t.Version, t.Status.ToDto(), t.IsArchived);
 
     public static TripDetailDto MapToDetail(Trip t) =>
         new(
-            t.Id, t.Name, t.Cur, t.OwnerId, t.Start, t.End, t.Version, t.Status.ToDto(),
+            t.Id, t.Name, t.Cur, t.OwnerId, t.Start, t.End, t.Version, t.Status.ToDto(), t.IsArchived,
             t.Members.Select(MemberDto.From).ToList(),
             t.Guests.Select(g => GuestDto.From(g)).ToList(),
             t.Expenses.Select(e => new ExpenseDto(
@@ -153,7 +172,8 @@ public class TripService(
                 e.SplitType, e.CreatedBy, e.IsTransfer,
                 e.GrossAmountMinor.HasValue ? e.GrossAmountMinor.Value / 100m : null,
                 e.DiscountPercent,
-                e.DiscountAmountMinor.HasValue ? e.DiscountAmountMinor.Value / 100m : null
+                e.DiscountAmountMinor.HasValue ? e.DiscountAmountMinor.Value / 100m : null,
+                e.Sponsors
             )).ToList(),
             t.Events.Select(ev => new TripEventDto(
                 ev.Id, ev.Title,

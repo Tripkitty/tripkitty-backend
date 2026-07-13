@@ -12,10 +12,10 @@ public static class TripEndpoints
     {
         var group = app.MapGroup("/trips").RequireAuthorization();
 
-        group.MapGet("/", async (ClaimsPrincipal user, ITripService tripService) =>
+        group.MapGet("/", async (ClaimsPrincipal user, ITripService tripService, bool archived = false) =>
         {
             var userId = GetUserId(user);
-            var trips = await tripService.GetAllAsync(userId);
+            var trips = await tripService.GetAllAsync(userId, archived);
             return Results.Ok(new { trips });
         });
 
@@ -53,6 +53,20 @@ public static class TripEndpoints
             var userId = GetUserId(user);
             await tripService.ClearAsync(id, userId);
             return Results.Ok(new { message = "Trip cleared" });
+        });
+
+        group.MapPost("/{id}/archive", async (string id, ClaimsPrincipal user, ITripService tripService) =>
+        {
+            var userId = GetUserId(user);
+            var trip = await tripService.SetArchivedAsync(id, userId, true);
+            return Results.Ok(new { trip });
+        });
+
+        group.MapPost("/{id}/unarchive", async (string id, ClaimsPrincipal user, ITripService tripService) =>
+        {
+            var userId = GetUserId(user);
+            var trip = await tripService.SetArchivedAsync(id, userId, false);
+            return Results.Ok(new { trip });
         });
 
         group.MapDelete("/{id}", async (string id, ClaimsPrincipal user, ITripService tripService) =>
